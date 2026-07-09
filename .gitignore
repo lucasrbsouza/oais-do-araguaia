@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.next/
+out/
+coverage/
+uploads/
+.env
+.env.*
+!.env.example
+*.log
+nginx/certs/

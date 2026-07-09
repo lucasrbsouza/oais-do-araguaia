@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OWNER
+}
+
+enum ChaletStatus {
+  FREE
+  RESERVED
+  OCCUPIED
+}
+
+enum EventStatus {
+  OPEN
+  CLOSED
+}
+
+enum ReservationStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum PurchaseCategory {
+  GROCERY
+  MEAT
+  ALCOHOL
+  SOFT_DRINKS
+  CLEANING
+  BAKERY
+  ICE
+  OTHER
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         Role      @default(OWNER)
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  chalets       Chalet[]
+  reservations  Reservation[]
+  purchases     Purchase[]
+  payments      Payment[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+  closedEvents  Event[]        @relation("EventClosedBy")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Chalet {
+  id        String       @id @default(uuid())
+  number    Int          @unique
+  name      String
+  ownerId   String?      @map("owner_id")
+  status    ChaletStatus @default(FREE)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  owner           User?            @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  reservations    Reservation[]
+  settlementItems SettlementItem[]
+  payments        Payment[]
+
+  @@map("chalets")
+}
+
+model Event {
+  id         String      @id @default(uuid())
+  name       String
+  startDate  DateTime    @map("start_date") @db.Date
+  endDate    DateTime    @map("end_date") @db.Date
+  status     EventStatus @default(OPEN)
+  closedAt   DateTime?   @map("closed_at")
+  closedById String?     @map("closed_by_id")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  closedBy     User?         @relation("EventClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  reservations Reservation[]
+  purchases    Purchase[]
+  settlement   Settlement?
+  payments     Payment[]
+
+  @@index([startDate])
+  @@map("events")
+}
+
+model Reservation {
+  id               String            @id @default(uuid())
+  eventId          String            @map("event_id")
+  chaletId         String            @map("chalet_id")
+  responsibleId    String            @map("responsible_id")
+  checkIn          DateTime          @map("check_in") @db.Date
+  checkOut         DateTime          @map("check_out") @db.Date
+  adults           Int
+  children         Int               @default(0)
+  alcoholConsumers Int               @default(0) @map("alcohol_consumers")
+  notes            String?
+  status           ReservationStatus @default(ACTIVE)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  event       Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  chalet      Chalet @relation(fields: [chaletId], references: [id], onDelete: Restrict)
+  responsible User   @relation(fields: [responsibleId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, chaletId])
+  @@index([chaletId])
+  @@index([responsibleId])
+  @@map("reservations")
+}
+
+model Purchase {
+  id            String           @id @default(uuid())
+  eventId       String           @map("event_id")
+  date          DateTime         @db.Date
+  description   String
+  category      PurchaseCategory
+  amountCents   Int              @map("amount_cents")
+  responsibleId String           @map("responsible_id")
+  receiptPath   String?          @map("receipt_path")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  responsible User  @relation(fields: [responsibleId], references: [id], onDelete: Restrict)
+
+  @@index([eventId])
+  @@index([category])
+  @@map("purchases")
+}
+
+model Settlement {
+  id           String   @id @default(uuid())
+  eventId      String   @unique @map("event_id")
+  strategy     String   @default("weighted-common+alcohol-consumers")
+  computedAt   DateTime @default(now()) @map("computed_at")
+  computedById String?  @map("computed_by_id")
+
+  event Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items SettlementItem[]
+
+  @@map("settlements")
+}
+
+model SettlementItem {
+  id           String @id @default(uuid())
+  settlementId String @map("settlement_id")
+  chaletId     String @map("chalet_id")
+  commonCents  Int    @map("common_cents")
+  alcoholCents Int    @map("alcohol_cents")
+  totalCents   Int    @map("total_cents")
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  chalet     Chalet     @relation(fields: [chaletId], references: [id], onDelete: Restrict)
+
+  @@unique([settlementId, chaletId])
+  @@map("settlement_items")
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  eventId        String   @map("event_id")
+  chaletId       String   @map("chalet_id")
+  date           DateTime @db.Date
+  amountCents    Int      @map("amount_cents")
+  notes          String?
+  registeredById String   @map("registered_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  event        Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  chalet       Chalet @relation(fields: [chaletId], references: [id], onDelete: Restrict)
+  registeredBy User   @relation(fields: [registeredById], references: [id], onDelete: Restrict)
+
+  @@index([eventId, chaletId])
+  @@map("payments")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
