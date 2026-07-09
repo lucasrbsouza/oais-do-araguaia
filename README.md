@@ -106,6 +106,28 @@ O cálculo do rateio usa **Strategy Pattern** (`ExpenseSharingStrategy`) e o val
 - Auditoria de todas as mutações (usuário, ação, data, IP) — sem corpo de requisição nos logs
 - Logs estruturados (pino) com correlation id; segredos apenas via variáveis de ambiente
 
+## Protótipo para o cliente (GitHub Pages)
+
+Demo clicável em **https://lucasrbsouza.github.io/oais-do-araguaia/** — frontend
+estático com backend **simulado no navegador** (dados fictícios no localStorage,
+mesma regra de rateio). Logins: `admin@demo.com` / `demo1234` e
+`dono@demo.com` / `demo1234`. Não é o deploy oficial.
+
+Para republicar o protótipo após mudanças:
+
+```bash
+cd frontend
+NEXT_PUBLIC_DEMO=1 NEXT_PUBLIC_BASE_PATH=/oais-do-araguaia npm run build
+cd out && touch .nojekyll && git init -b gh-pages && git add -A \
+  && git commit -m "deploy: protótipo" \
+  && git push -f https://github.com/lucasrbsouza/oais-do-araguaia.git gh-pages \
+  && rm -rf .git
+```
+
+(Automação via Actions está pronta em `.github/workflows-disabled/deploy-pages.yml`;
+para ativá-la, rode `gh auth refresh -s workflow` e mova o arquivo para
+`.github/workflows/`.)
+
 ## Deploy em produção
 
 ```bash
