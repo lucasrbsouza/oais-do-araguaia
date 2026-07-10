@@ -1,3 +1,7 @@
+"use client";
+
+import { Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface FieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -22,6 +26,41 @@ export function Field({ label, error, className, id, ...props }: FieldProps) {
         aria-invalid={Boolean(error)}
         {...props}
       />
+      {error && <p className="text-xs text-error">{error}</p>}
+    </div>
+  );
+}
+
+/** Campo de senha com botão "ver senha". */
+export function PasswordField({ label, error, className, id, ...props }: FieldProps) {
+  const [visible, setVisible] = useState(false);
+  const inputId = id ?? props.name;
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={inputId} className="text-sm font-medium text-muted">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={inputId}
+          type={visible ? "text" : "password"}
+          className={cn(
+            "h-11 w-full rounded-sm border border-hairline px-3 pr-11 text-base text-ink placeholder:text-muted-soft focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink",
+            error && "border-error",
+            className,
+          )}
+          aria-invalid={Boolean(error)}
+          {...props}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          aria-label={visible ? "Ocultar senha" : "Ver senha"}
+          className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink"
+        >
+          {visible ? <EyeOff className="size-5" aria-hidden /> : <Eye className="size-5" aria-hidden />}
+        </button>
+      </div>
       {error && <p className="text-xs text-error">{error}</p>}
     </div>
   );

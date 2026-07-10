@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { IS_DEMO, login } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/input";
+import { Field, PasswordField } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/states";
 
 const schema = z.object({
@@ -16,6 +16,53 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
+
+const BACKGROUND_ROWS = [
+  {
+    offset: "-translate-x-16",
+    cards: [
+      { label: "Oasis Do Araguaia", color: "from-teal-400 to-teal-500" },
+      { label: "Pará", color: "from-blue-400 to-blue-500" },
+      { label: "Araguaia", color: "from-emerald-400 to-emerald-500" },
+      { label: "Rio", color: "from-amber-400 to-amber-500" },
+      { label: "Oasis Do Araguaia", color: "from-rose-400 to-rose-500" },
+      { label: "Pará", color: "from-indigo-400 to-indigo-500" },
+    ],
+  },
+  {
+    offset: "translate-x-8",
+    cards: [
+      { label: "Pará", color: "from-rose-400 to-rose-500" },
+      { label: "Rio", color: "from-orange-400 to-orange-500" },
+      { label: "Oasis Do Araguaia", color: "from-teal-400 to-teal-500" },
+      { label: "Araguaia", color: "from-cyan-400 to-cyan-500" },
+      { label: "Pará", color: "from-blue-400 to-blue-500" },
+      { label: "Rio", color: "from-amber-400 to-amber-500" },
+    ],
+  },
+  {
+    offset: "-translate-x-8",
+    cards: [
+      { label: "Araguaia", color: "from-emerald-400 to-emerald-500" },
+      { label: "Oasis Do Araguaia", color: "from-indigo-400 to-indigo-500" },
+      { label: "Rio", color: "from-orange-400 to-orange-500" },
+      { label: "Pará", color: "from-rose-400 to-rose-500" },
+      { label: "Oasis Do Araguaia", color: "from-teal-400 to-teal-500" },
+      { label: "Araguaia", color: "from-cyan-400 to-cyan-500" },
+    ],
+  },
+  {
+    offset: "translate-x-16",
+    cards: [
+      { label: "Rio", color: "from-amber-400 to-amber-500" },
+      { label: "Pará", color: "from-blue-400 to-blue-500" },
+      { label: "Oasis Do Araguaia", color: "from-rose-400 to-rose-500" },
+      { label: "Araguaia", color: "from-emerald-400 to-emerald-500" },
+      { label: "Rio", color: "from-orange-400 to-orange-500" },
+      { label: "Pará", color: "from-indigo-400 to-indigo-500" },
+    ],
+  },
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,12 +84,52 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface-soft p-4">
-      <div className="w-full max-w-md rounded-md bg-canvas p-8 shadow-float">
-        <h1 className="text-2xl font-bold text-ink">Oaís do Araguaia</h1>
-        <p className="mb-6 mt-1 text-sm text-muted">
-          Gestão do condomínio de chalés
-        </p>
+    <main className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden">
+      {/* Fundo decorativo inspirado no Airbnb */}
+      <div className="fixed inset-0 -z-10 overflow-hidden bg-[#e8e7e3] flex flex-col justify-center gap-6 p-4">
+        <div className="absolute inset-0 flex flex-col justify-center gap-6 pointer-events-none scale-105 select-none blur-[1.5px] opacity-95">
+          {BACKGROUND_ROWS.map((row, rowIdx) => (
+            <div
+              key={rowIdx}
+              className={`flex flex-row gap-6 justify-center ${row.offset}`}
+            >
+              {row.cards.map((card, cardIdx) => (
+                <div
+                  key={cardIdx}
+                  className={`w-40 sm:w-48 md:w-56 shrink-0 flex flex-col justify-between p-5 rounded-2xl border border-hairline/15 bg-gradient-to-b ${card.color} h-56 sm:h-64 shadow-md`}
+                >
+                  <div className="flex-1 flex items-center justify-center">
+                    <img
+                      src="/logo-sem-fundo.png"
+                      alt=""
+                      className="h-16 sm:h-20 object-contain opacity-100"
+                    />
+                  </div>
+                  <span className="text-xs sm:text-sm font-black text-ink tracking-widest text-center block uppercase">
+                    {card.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="absolute inset-0 bg-[#e8e7e3]/5 backdrop-blur-[0.2px]" />
+      </div>
+
+      <div className="w-full max-w-md rounded-md bg-canvas p-8 shadow-float z-10">
+        <div className="flex items-center gap-3 mb-6">
+          <img
+            src="/logo-sem-fundo.png"
+            alt="Logo Oasís do Araguaia"
+            className="size-12 object-contain"
+          />
+          <div>
+            <h1 className="text-2xl font-bold text-ink leading-tight">Oasís do Araguaia</h1>
+            <p className="text-xs text-muted">
+              Gestão do condomínio de chalés
+            </p>
+          </div>
+        </div>
         {IS_DEMO && (
           <div className="mb-4 rounded-sm border border-warning/30 bg-amber-50 px-4 py-3 text-sm text-warning">
             <p className="font-semibold">Protótipo de demonstração</p>
@@ -62,9 +149,8 @@ export default function LoginPage() {
             error={errors.email?.message}
             {...register("email")}
           />
-          <Field
+          <PasswordField
             label="Senha"
-            type="password"
             autoComplete="current-password"
             error={errors.password?.message}
             {...register("password")}

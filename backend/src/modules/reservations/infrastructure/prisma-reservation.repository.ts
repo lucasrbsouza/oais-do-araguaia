@@ -54,10 +54,17 @@ export class PrismaReservationRepository implements ReservationRepository {
   list(filter: ListReservationsFilter): Promise<ReservationDetail[]> {
     return this.prisma.reservation.findMany({
       where: {
-        ...(filter.eventId ? { eventId: filter.eventId } : {}),
+        // Listagens gerais (calendário, reservas) escondem eventos cancelados;
+        // a aba de reservas de um evento específico continua mostrando.
+        ...(filter.eventId
+          ? { eventId: filter.eventId }
+          : { event: { status: { not: 'CANCELLED' } } }),
         ...(filter.chaletId ? { chaletId: filter.chaletId } : {}),
         ...(filter.responsibleId
           ? { responsibleId: filter.responsibleId }
+          : {}),
+        ...(filter.chaletOwnerId
+          ? { chalet: { ownerId: filter.chaletOwnerId } }
           : {}),
         ...(filter.from ? { checkOut: { gte: filter.from } } : {}),
         ...(filter.to ? { checkIn: { lte: filter.to } } : {}),

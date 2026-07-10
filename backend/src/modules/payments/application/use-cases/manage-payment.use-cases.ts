@@ -7,6 +7,7 @@ import {
 import { AuthenticatedUser } from '../../../../shared/infrastructure/auth/decorators';
 import { ChaletRepository } from '../../../chalets/domain/chalet.repository';
 import { EventRepository } from '../../../events/domain/event.repository';
+import { PurchaseRepository } from '../../../purchases/domain/purchase.repository';
 import { SettlementRepository } from '../../../settlement/domain/settlement.repository';
 import {
   derivePaymentStatus,
@@ -28,6 +29,10 @@ export interface ChaletPaymentSummary {
   chaletName: string;
   owedCents: number;
   paidCents: number;
+  /** Compras/adiantamentos lançados vinculados ao chalé. */
+  advanceCents: number;
+  /** Saldo devedor: devido − pago − adiantamentos (negativo = crédito). */
+  balanceCents: number;
   status: PaymentStatus;
   payments: Array<{
     id: string;
@@ -65,6 +70,7 @@ export class RegisterPaymentUseCase {
 export class GetEventPaymentsUseCase {
   constructor(
     private readonly paymentRepository: PaymentRepository,
+    private readonly purchaseRepository: PurchaseRepository,
     private readonly settlementRepository: SettlementRepository,
     private readonly chaletRepository: ChaletRepository,
   ) {}
@@ -86,6 +92,11 @@ export class GetEventPaymentsUseCase {
       paymentsByChalet.set(payment.chaletId, list);
     }
 
+    const advances = await this.purchaseRepository.advancesByEvent(eventId);
+    const advancesByChalet = new Map(
+      advances.map((a) => [a.chaletId, a.totalCents]),
+    );
+
     let items = settlement.items;
     if (user.role !== Role.ADMIN) {
       const ownChalets = await this.chaletRepository.findByOwner(user.id);
@@ -102,13 +113,16 @@ export class GetEventPaymentsUseCase {
         (sum, p) => sum + p.amountCents,
         0,
       );
+      const advanceCents = advancesByChalet.get(item.chaletId) ?? 0;
       return {
         chaletId: item.chaletId,
         chaletNumber: item.chaletNumber,
         chaletName: item.chaletName,
         owedCents: item.totalCents,
         paidCents,
-        status: derivePaymentStatus(item.totalCents, paidCents),
+        advanceCents,
+        balanceCents: item.totalCents - paidCents - advanceCents,
+        status: derivePaymentStatus(item.totalCents, paidCents + advanceCents),
         payments: chaletPayments.map((p) => ({
           id: p.id,
           date: p.date,

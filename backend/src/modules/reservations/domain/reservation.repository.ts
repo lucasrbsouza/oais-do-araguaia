@@ -30,6 +30,8 @@ export interface ListReservationsFilter {
   eventId?: string;
   chaletId?: string;
   responsibleId?: string;
+  /** Restringe às reservas de chalés deste proprietário (perfil OWNER). */
+  chaletOwnerId?: string;
   from?: Date;
   to?: Date;
 }

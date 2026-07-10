@@ -1,28 +1,38 @@
-import { Purchase, PurchaseCategory, User } from '@prisma/client';
+import { Chalet, Purchase, PurchaseCategory, User } from '@prisma/client';
 
-export type PurchaseDetail = Purchase & { responsible: User };
+export type PurchaseDetail = Purchase & {
+  responsible: User;
+  chalet: Chalet | null;
+};
 
 export interface CreatePurchaseData {
   eventId: string;
   date: Date;
-  description: string;
+  description?: string | null;
   category: PurchaseCategory;
   amountCents: number;
   responsibleId: string;
+  chaletId?: string | null;
 }
 
 export interface UpdatePurchaseData {
   date?: Date;
-  description?: string;
+  description?: string | null;
   category?: PurchaseCategory;
   amountCents?: number;
   responsibleId?: string;
+  chaletId?: string | null;
   receiptPath?: string;
 }
 
 export interface ListPurchasesFilter {
   eventId?: string;
   category?: PurchaseCategory;
+}
+
+export interface ChaletAdvanceTotal {
+  chaletId: string;
+  totalCents: number;
 }
 
 export abstract class PurchaseRepository {
@@ -34,4 +44,6 @@ export abstract class PurchaseRepository {
   ): Promise<PurchaseDetail>;
   abstract delete(id: string): Promise<void>;
   abstract list(filter: ListPurchasesFilter): Promise<PurchaseDetail[]>;
+  /** Total de compras/adiantamentos vinculados a cada chalé no evento. */
+  abstract advancesByEvent(eventId: string): Promise<ChaletAdvanceTotal[]>;
 }

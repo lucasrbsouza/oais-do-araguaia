@@ -40,6 +40,114 @@ export class CreateEventUseCase {
   }
 }
 
+export interface UpdateEventInput {
+  id: string;
+  name?: string;
+  startDate?: Date;
+  endDate?: Date;
+}
+
+@Injectable()
+export class UpdateEventUseCase {
+  constructor(private readonly eventRepository: EventRepository) {}
+
+  async execute(input: UpdateEventInput): Promise<Event> {
+    const event = await this.eventRepository.findById(input.id);
+    if (!event) {
+      throw new NotFoundError('Evento não encontrado.');
+    }
+    if (event.status === EventStatus.CLOSED) {
+      throw new ConflictError(
+        'Evento encerrado não pode ser editado. Reabra-o primeiro.',
+      );
+    }
+
+    const startDate = input.startDate ?? event.startDate;
+    const endDate = input.endDate ?? event.endDate;
+    DateRange.create(startDate, endDate);
+
+    if (input.startDate || input.endDate) {
+      const overlapping = await this.eventRepository.findOverlapping(
+        startDate,
+        endDate,
+        input.id,
+      );
+      if (overlapping.length > 0) {
+        throw new ConflictError(
+          `Já existe o evento "${overlapping[0].name}" neste período.`,
+        );
+      }
+    }
+
+    return this.eventRepository.update(input.id, {
+      name: input.name,
+      startDate: input.startDate,
+      endDate: input.endDate,
+    });
+  }
+}
+
+@Injectable()
+export class CancelEventUseCase {
+  constructor(
+    private readonly eventRepository: EventRepository,
+    private readonly auditService: AuditService,
+  ) {}
+
+  async execute(eventId: string, cancelledById: string): Promise<Event> {
+    const event = await this.eventRepository.findById(eventId);
+    if (!event) {
+      throw new NotFoundError('Evento não encontrado.');
+    }
+    if (event.status === EventStatus.CLOSED) {
+      throw new ConflictError(
+        'Evento encerrado não pode ser cancelado. Reabra-o primeiro.',
+      );
+    }
+    if (event.status === EventStatus.CANCELLED) {
+      throw new ConflictError('Evento já está cancelado.');
+    }
+
+    const cancelled = await this.eventRepository.cancel(eventId);
+    await this.auditService.log({
+      userId: cancelledById,
+      action: 'EVENT_CANCELLED',
+      entity: 'Event',
+      entityId: eventId,
+    });
+    return cancelled;
+  }
+}
+
+@Injectable()
+export class DeleteEventUseCase {
+  constructor(
+    private readonly eventRepository: EventRepository,
+    private readonly auditService: AuditService,
+  ) {}
+
+  async execute(eventId: string, deletedById: string): Promise<void> {
+    const event = await this.eventRepository.findById(eventId);
+    if (!event) {
+      throw new NotFoundError('Evento não encontrado.');
+    }
+    const hasActivity = await this.eventRepository.hasActivity(eventId);
+    if (hasActivity) {
+      throw new ConflictError(
+        'Este evento possui reservas, compras ou pagamentos e não pode ser excluído. Cancele-o em vez disso.',
+      );
+    }
+
+    await this.eventRepository.delete(eventId);
+    await this.auditService.log({
+      userId: deletedById,
+      action: 'EVENT_DELETED',
+      entity: 'Event',
+      entityId: eventId,
+    });
+  }
+}
+
 @Injectable()
 export class ListEventsUseCase {
   constructor(private readonly eventRepository: EventRepository) {}
@@ -78,6 +186,11 @@ export class CloseEventUseCase {
     }
     if (event.status === EventStatus.CLOSED) {
       throw new ConflictError('Evento já está encerrado.');
+    }
+    if (event.status === EventStatus.CANCELLED) {
+      throw new ConflictError(
+        'Evento cancelado não pode ser encerrado. Reabra-o primeiro.',
+      );
     }
 
     const input = await this.settlementRepository.getCalculationInput(eventId);

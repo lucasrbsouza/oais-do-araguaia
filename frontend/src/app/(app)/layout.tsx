@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { href: "/eventos", label: "Eventos", icon: PartyPopper },
   { href: "/reservas", label: "Reservas", icon: BedDouble },
   { href: "/chales", label: "Chalés", icon: Home },
-  { href: "/usuarios", label: "Usuários", icon: Users, adminOnly: true },
+  { href: "/usuarios", label: "Usuários", icon: Users },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -51,14 +51,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const items = NAV_ITEMS.filter((item) => !item.adminOnly || user.role === "ADMIN");
+  const items = NAV_ITEMS;
 
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-hairline bg-canvas md:flex">
-        <div className="border-b border-hairline px-5 py-5">
-          <span className="text-lg font-bold text-primary">Oaís do Araguaia</span>
-          <p className="text-xs text-muted">Condomínio de chalés</p>
+        <div className="border-b border-hairline px-5 py-5 flex items-center gap-3">
+          <img
+            src="/logo-sem-fundo.png"
+            alt="Logo Oasís do Araguaia"
+            className="size-10 object-contain"
+          />
+          <div>
+            <span className="text-base font-bold text-primary block leading-tight">Oasís do Araguaia</span>
+            <p className="text-[10px] text-muted">Condomínio de chalés</p>
+          </div>
         </div>
         <nav className="flex-1 space-y-1 p-3" aria-label="Menu principal">
           {items.map(({ href, label, icon: Icon }) => (
@@ -91,7 +98,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-hairline px-4 py-3 md:hidden">
-          <span className="font-bold text-primary">Oaís do Araguaia</span>
+          <div className="flex items-center gap-2">
+            <img
+              src="/logo-sem-fundo.png"
+              alt="Logo Oasís do Araguaia"
+              className="size-8 object-contain"
+            />
+            <span className="font-bold text-primary">Oasís do Araguaia</span>
+          </div>
           <button
             onClick={() => void logout().then(() => router.replace("/login"))}
             aria-label="Sair"

@@ -21,11 +21,17 @@ enum ChaletStatus {
 enum EventStatus {
   OPEN
   CLOSED
+  CANCELLED
 }
 
 enum ReservationStatus {
   ACTIVE
   CANCELLED
+}
+
+enum ReceivableStatus {
+  OPEN
+  SETTLED
 }
 
 enum PurchaseCategory {
@@ -87,6 +93,8 @@ model Chalet {
   reservations    Reservation[]
   settlementItems SettlementItem[]
   payments        Payment[]
+  purchases       Purchase[]
+  receivables     Receivable[]
 
   @@map("chalets")
 }
@@ -107,6 +115,7 @@ model Event {
   purchases    Purchase[]
   settlement   Settlement?
   payments     Payment[]
+  receivables  Receivable[]
 
   @@index([startDate])
   @@map("events")
@@ -131,7 +140,7 @@ model Reservation {
   chalet      Chalet @relation(fields: [chaletId], references: [id], onDelete: Restrict)
   responsible User   @relation(fields: [responsibleId], references: [id], onDelete: Restrict)
 
-  @@unique([eventId, chaletId])
+  @@index([eventId, chaletId])
   @@index([chaletId])
   @@index([responsibleId])
   @@map("reservations")
@@ -141,19 +150,22 @@ model Purchase {
   id            String           @id @default(uuid())
   eventId       String           @map("event_id")
   date          DateTime         @db.Date
-  description   String
+  description   String?
   category      PurchaseCategory
   amountCents   Int              @map("amount_cents")
   responsibleId String           @map("responsible_id")
+  chaletId      String?          @map("chalet_id")
   receiptPath   String?          @map("receipt_path")
   createdAt     DateTime         @default(now()) @map("created_at")
   updatedAt     DateTime         @updatedAt @map("updated_at")
 
-  event       Event @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  responsible User  @relation(fields: [responsibleId], references: [id], onDelete: Restrict)
+  event       Event   @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  responsible User    @relation(fields: [responsibleId], references: [id], onDelete: Restrict)
+  chalet      Chalet? @relation(fields: [chaletId], references: [id], onDelete: SetNull)
 
   @@index([eventId])
   @@index([category])
+  @@index([chaletId])
   @@map("purchases")
 }
 
@@ -201,6 +213,26 @@ model Payment {
 
   @@index([eventId, chaletId])
   @@map("payments")
+}
+
+/// Crédito gerado para um chalé quando adiantamentos + pagamentos superam
+/// o valor devido no rateio, registrado automaticamente ao encerrar o evento.
+model Receivable {
+  id          String           @id @default(uuid())
+  eventId     String           @map("event_id")
+  chaletId    String           @map("chalet_id")
+  amountCents Int              @map("amount_cents")
+  status      ReceivableStatus @default(OPEN)
+  settledAt   DateTime?        @map("settled_at")
+  notes       String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  chalet Chalet @relation(fields: [chaletId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, chaletId])
+  @@index([status])
+  @@map("receivables")
 }
 
 model AuditLog {

@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -35,11 +37,14 @@ import {
 import type { AuthenticatedUser } from '../../../shared/infrastructure/auth/decorators';
 import { PaginatedEvents } from '../domain/event.repository';
 import {
+  CancelEventUseCase,
   CloseEventUseCase,
   CreateEventUseCase,
+  DeleteEventUseCase,
   GetEventUseCase,
   ListEventsUseCase,
   ReopenEventUseCase,
+  UpdateEventUseCase,
 } from '../application/use-cases/manage-event.use-cases';
 
 class CreateEventDto {
@@ -58,6 +63,27 @@ class CreateEventDto {
   @Type(() => Date)
   @IsDate()
   endDate!: Date;
+}
+
+class UpdateEventDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name?: string;
+
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  startDate?: Date;
+
+  @ApiPropertyOptional({ type: Date })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  endDate?: Date;
 }
 
 class ListEventsQuery {
@@ -104,6 +130,9 @@ export class EventsController {
     private readonly getEvent: GetEventUseCase,
     private readonly closeEvent: CloseEventUseCase,
     private readonly reopenEvent: ReopenEventUseCase,
+    private readonly updateEvent: UpdateEventUseCase,
+    private readonly cancelEvent: CancelEventUseCase,
+    private readonly deleteEvent: DeleteEventUseCase,
   ) {}
 
   @Get()
@@ -120,6 +149,35 @@ export class EventsController {
   @Roles('ADMIN')
   create(@Body() dto: CreateEventDto): Promise<Event> {
     return this.createEvent.execute(dto);
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateEventDto,
+  ): Promise<Event> {
+    return this.updateEvent.execute({ id, ...dto });
+  }
+
+  @Post(':id/cancel')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<Event> {
+    return this.cancelEvent.execute(id, user.id);
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  delete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.deleteEvent.execute(id, user.id);
   }
 
   @Post(':id/close')

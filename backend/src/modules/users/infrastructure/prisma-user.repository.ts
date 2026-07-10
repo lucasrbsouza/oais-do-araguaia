@@ -30,4 +30,18 @@ export class PrismaUserRepository implements UserRepository {
   list(): Promise<User[]> {
     return this.prisma.user.findMany({ orderBy: { name: 'asc' } });
   }
+
+  async hasHistory(id: string): Promise<boolean> {
+    const [chalets, reservations, purchases, payments] = await Promise.all([
+      this.prisma.chalet.count({ where: { ownerId: id } }),
+      this.prisma.reservation.count({ where: { responsibleId: id } }),
+      this.prisma.purchase.count({ where: { responsibleId: id } }),
+      this.prisma.payment.count({ where: { registeredById: id } }),
+    ]);
+    return chalets + reservations + purchases + payments > 0;
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.prisma.user.delete({ where: { id } });
+  }
 }

@@ -1,5 +1,5 @@
 export type Role = "ADMIN" | "OWNER";
-export type EventStatus = "OPEN" | "CLOSED";
+export type EventStatus = "OPEN" | "CLOSED" | "CANCELLED";
 export type PaymentStatus = "PENDING" | "PARTIAL" | "PAID";
 export type ChaletStatus = "FREE" | "RESERVED" | "OCCUPIED";
 
@@ -79,7 +79,7 @@ export interface Paginated<T> {
 export interface Reservation {
   id: string;
   eventId: string;
-  chalet: { id: string; number: number; name: string };
+  chalet: { id: string; number: number; name: string; ownerId: string | null };
   responsible: { id: string; name: string };
   checkIn: string;
   checkOut: string;
@@ -94,10 +94,12 @@ export interface Purchase {
   id: string;
   eventId: string;
   date: string;
-  description: string;
+  description: string | null;
   category: PurchaseCategory;
   amountCents: number;
   responsible: { id: string; name: string };
+  /** Chalé beneficiado quando a compra é um adiantamento vinculado à reserva. */
+  chalet: { id: string; number: number; name: string } | null;
   hasReceipt: boolean;
 }
 
@@ -124,8 +126,34 @@ export interface ChaletPaymentSummary {
   chaletName: string;
   owedCents: number;
   paidCents: number;
+  /** Compras/adiantamentos lançados vinculados ao chalé. */
+  advanceCents: number;
+  /** Saldo devedor: devido − pago − adiantamentos (negativo = crédito). */
+  balanceCents: number;
   status: PaymentStatus;
   payments: Array<{ id: string; date: string; amountCents: number; notes: string | null }>;
+}
+
+export type ReceivableStatus = "OPEN" | "SETTLED";
+
+export const RECEIVABLE_STATUS_LABELS: Record<ReceivableStatus, string> = {
+  OPEN: "Em aberto",
+  SETTLED: "Quitado",
+};
+
+/** Crédito gerado automaticamente no fechamento do evento. */
+export interface Receivable {
+  id: string;
+  eventId: string;
+  eventName: string;
+  chaletId: string;
+  chaletNumber: number;
+  chaletName: string;
+  amountCents: number;
+  status: ReceivableStatus;
+  settledAt: string | null;
+  notes: string | null;
+  createdAt: string;
 }
 
 export interface EventReport {
@@ -141,6 +169,7 @@ export interface EventReport {
     commonCents: number;
     alcoholCents: number;
     totalCents: number;
+    advanceCents: number;
     paidCents: number;
     paymentStatus: PaymentStatus;
   }> | null;

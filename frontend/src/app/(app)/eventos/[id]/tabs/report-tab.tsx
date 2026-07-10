@@ -1,20 +1,41 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useState } from "react";
+import { FileSpreadsheet, FileText } from "lucide-react";
+import { api, downloadFile, IS_DEMO } from "@/lib/api";
 import { formatCents } from "@/lib/format";
 import type { EventReport } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
+import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { PaymentStatusBadge } from "@/components/ui/badge";
 import { Table, Td, Th } from "@/components/ui/table";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/states";
 
 export function ReportTab({ eventId }: { eventId: string }) {
+  const [exporting, setExporting] = useState<"xlsx" | "pdf" | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["report", eventId],
     queryFn: () => api<EventReport>(`/reports/events/${eventId}`),
   });
+
+  const handleExport = async (format: "xlsx" | "pdf") => {
+    setExporting(format);
+    setExportError(null);
+    try {
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      const ts = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}-${pad(now.getHours())}h${pad(now.getMinutes())}`;
+      await downloadFile(`/reports/events/${eventId}/export/${format}`, `relatorio-${ts}.${format}`);
+    } catch (err) {
+      setExportError((err as Error).message);
+    } finally {
+      setExporting(null);
+    }
+  };
 
   if (isLoading) return <TableSkeleton />;
   if (error) return <ErrorState message={(error as Error).message} />;
@@ -22,6 +43,30 @@ export function ReportTab({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-6">
+      {!IS_DEMO && (
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => void handleExport("xlsx")}
+            loading={exporting === "xlsx"}
+            disabled={exporting !== null}
+          >
+            {exporting !== "xlsx" && <FileSpreadsheet className="size-4" aria-hidden />}
+            Exportar Excel
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => void handleExport("pdf")}
+            loading={exporting === "pdf"}
+            disabled={exporting !== null}
+          >
+            {exporting !== "pdf" && <FileText className="size-4" aria-hidden />}
+            Exportar PDF
+          </Button>
+        </div>
+      )}
+      {exportError && <ErrorState message={exportError} />}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="py-4">
           <p className="text-sm text-muted">Adultos</p>
@@ -93,6 +138,7 @@ export function ReportTab({ eventId }: { eventId: string }) {
                   <Th className="text-right">Comum</Th>
                   <Th className="text-right">Álcool</Th>
                   <Th className="text-right">Total</Th>
+                  <Th className="text-right">Adiantado</Th>
                   <Th className="text-right">Pago</Th>
                   <Th>Status</Th>
                 </tr>
@@ -106,6 +152,7 @@ export function ReportTab({ eventId }: { eventId: string }) {
                     <Td className="text-right">{formatCents(row.commonCents)}</Td>
                     <Td className="text-right">{formatCents(row.alcoholCents)}</Td>
                     <Td className="text-right font-semibold">{formatCents(row.totalCents)}</Td>
+                    <Td className="text-right">{formatCents(row.advanceCents)}</Td>
                     <Td className="text-right">{formatCents(row.paidCents)}</Td>
                     <Td>
                       <PaymentStatusBadge status={row.paymentStatus} />

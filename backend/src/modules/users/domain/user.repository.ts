@@ -21,4 +21,6 @@ export abstract class UserRepository {
   abstract create(data: CreateUserData): Promise<User>;
   abstract update(id: string, data: UpdateUserData): Promise<User>;
   abstract list(): Promise<User[]>;
+  abstract hasHistory(id: string): Promise<boolean>;
+  abstract delete(id: string): Promise<void>;
 }

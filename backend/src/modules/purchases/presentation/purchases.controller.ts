@@ -37,7 +37,7 @@ import {
   IsUUID,
   MaxLength,
   Min,
-  MinLength,
+  ValidateIf,
 } from 'class-validator';
 import type { Response } from 'express';
 import { CurrentUser } from '../../../shared/infrastructure/auth/decorators';
@@ -65,11 +65,11 @@ class CreatePurchaseDto {
   @IsDate()
   date!: Date;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  @MinLength(2)
   @MaxLength(200)
-  description!: string;
+  description?: string;
 
   @ApiProperty({ enum: PurchaseCategory })
   @IsEnum(PurchaseCategory)
@@ -79,6 +79,13 @@ class CreatePurchaseDto {
   @IsInt()
   @Min(1)
   amountCents!: number;
+
+  @ApiPropertyOptional({
+    description: 'Chalé beneficiado (adiantamento vinculado à reserva).',
+  })
+  @IsOptional()
+  @IsUUID()
+  chaletId?: string;
 }
 
 class UpdatePurchaseDto {
@@ -88,12 +95,12 @@ class UpdatePurchaseDto {
   @IsDate()
   date?: Date;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
-  @MinLength(2)
   @MaxLength(200)
-  description?: string;
+  description?: string | null;
 
   @ApiPropertyOptional({ enum: PurchaseCategory })
   @IsOptional()
@@ -105,6 +112,16 @@ class UpdatePurchaseDto {
   @IsInt()
   @Min(1)
   amountCents?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Chalé beneficiado (adiantamento). Envie null para desvincular.',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  chaletId?: string | null;
 }
 
 class ListPurchasesQuery {
@@ -142,21 +159,28 @@ export class PurchasesController {
     @Body() dto: CreatePurchaseDto,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<PurchaseResponse> {
-    return this.createPurchase.execute({ ...dto, responsibleId: user.id });
+    return this.createPurchase.execute(
+      { ...dto, responsibleId: user.id },
+      user,
+    );
   }
 
   @Patch(':id')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePurchaseDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<PurchaseResponse> {
-    return this.updatePurchase.execute({ id, ...dto });
+    return this.updatePurchase.execute({ id, ...dto }, user);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  delete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.deletePurchase.execute(id);
+  delete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.deletePurchase.execute(id, user);
   }
 
   @Post(':id/receipt')
@@ -179,8 +203,9 @@ export class PurchasesController {
       }),
     )
     file: Express.Multer.File,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<PurchaseResponse> {
-    return this.attachReceipt.execute(id, file.buffer, file.originalname);
+    return this.attachReceipt.execute(id, file.buffer, file.originalname, user);
   }
 
   @Get(':id/receipt')

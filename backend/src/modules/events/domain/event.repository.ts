@@ -45,4 +45,7 @@ export abstract class EventRepository {
     closedById: string,
   ): Promise<Event>;
   abstract reopen(eventId: string): Promise<Event>;
+  abstract cancel(eventId: string): Promise<Event>;
+  abstract hasActivity(eventId: string): Promise<boolean>;
+  abstract delete(eventId: string): Promise<void>;
 }

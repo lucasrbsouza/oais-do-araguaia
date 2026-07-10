@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
 } from '@nestjs/common';
 import {
@@ -33,6 +34,12 @@ import {
   GetEventPaymentsUseCase,
   RegisterPaymentUseCase,
 } from '../application/use-cases/manage-payment.use-cases';
+import {
+  ListEventReceivablesUseCase,
+  ListOpenReceivablesUseCase,
+  ReceivableResponse,
+  SettleReceivableUseCase,
+} from '../application/use-cases/manage-receivable.use-cases';
 
 class RegisterPaymentDto {
   @ApiProperty()
@@ -60,6 +67,14 @@ class RegisterPaymentDto {
   notes?: string;
 }
 
+class SettleReceivableDto {
+  @ApiPropertyOptional({ description: 'Observação sobre a quitação.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  notes?: string;
+}
+
 @ApiTags('payments')
 @ApiBearerAuth()
 @Controller()
@@ -67,6 +82,9 @@ export class PaymentsController {
   constructor(
     private readonly registerPayment: RegisterPaymentUseCase,
     private readonly getEventPayments: GetEventPaymentsUseCase,
+    private readonly listEventReceivables: ListEventReceivablesUseCase,
+    private readonly listOpenReceivables: ListOpenReceivablesUseCase,
+    private readonly settleReceivable: SettleReceivableUseCase,
   ) {}
 
   @Post('payments')
@@ -84,5 +102,29 @@ export class PaymentsController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<ChaletPaymentSummary[]> {
     return this.getEventPayments.execute(eventId, user);
+  }
+
+  @Get('events/:eventId/receivables')
+  receivablesByEvent(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ReceivableResponse[]> {
+    return this.listEventReceivables.execute(eventId, user);
+  }
+
+  @Get('receivables')
+  openReceivables(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ReceivableResponse[]> {
+    return this.listOpenReceivables.execute(user);
+  }
+
+  @Patch('receivables/:id/settle')
+  @Roles('ADMIN')
+  settle(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SettleReceivableDto,
+  ): Promise<ReceivableResponse> {
+    return this.settleReceivable.execute(id, dto.notes);
   }
 }

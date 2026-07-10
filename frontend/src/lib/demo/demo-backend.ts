@@ -12,6 +12,7 @@ import type {
   EventReport,
   EventStatus,
   PurchaseCategory,
+  ReceivableStatus,
   Role,
   SessionUser,
 } from "@/lib/types";
@@ -74,11 +75,24 @@ interface DbPurchase {
   id: string;
   eventId: string;
   date: string;
-  description: string;
+  description: string | null;
   category: PurchaseCategory;
   amountCents: number;
   responsibleId: string;
+  /** Chalé beneficiado quando é adiantamento vinculado à reserva. */
+  chaletId?: string | null;
   receiptDataUrl: string | null;
+}
+
+interface DbReceivable {
+  id: string;
+  eventId: string;
+  chaletId: string;
+  amountCents: number;
+  status: ReceivableStatus;
+  settledAt: string | null;
+  notes: string | null;
+  createdAt: string;
 }
 
 interface DbSettlementItem {
@@ -111,6 +125,7 @@ interface Db {
   purchases: DbPurchase[];
   settlements: DbSettlement[];
   payments: DbPayment[];
+  receivables: DbReceivable[];
   eventSeq: number;
 }
 
@@ -215,6 +230,7 @@ function seed(): Db {
     purchases,
     settlements: [],
     payments: [],
+    receivables: [],
     eventSeq: 1,
   };
 }
@@ -235,7 +251,12 @@ function loadDb(): Db {
   if (typeof window === "undefined") return seed();
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as Db;
+    if (raw) {
+      const db = JSON.parse(raw) as Db;
+      // bancos salvos antes das contas a receber
+      db.receivables ??= [];
+      return db;
+    }
   } catch {
     // storage corrompido — recomeça
   }
@@ -383,19 +404,75 @@ const reservationResponse = (db: Db, r: DbReservation) => {
   };
 };
 
-const purchaseResponse = (db: Db, p: DbPurchase) => ({
-  id: p.id,
-  eventId: p.eventId,
-  date: p.date,
-  description: p.description,
-  category: p.category,
-  amountCents: p.amountCents,
-  responsible: {
-    id: p.responsibleId,
-    name: db.users.find((u) => u.id === p.responsibleId)?.name ?? "?",
-  },
-  hasReceipt: p.receiptDataUrl !== null,
-});
+const purchaseResponse = (db: Db, p: DbPurchase) => {
+  const chalet = p.chaletId ? db.chalets.find((c) => c.id === p.chaletId) : null;
+  return {
+    id: p.id,
+    eventId: p.eventId,
+    date: p.date,
+    description: p.description,
+    category: p.category,
+    amountCents: p.amountCents,
+    responsible: {
+      id: p.responsibleId,
+      name: db.users.find((u) => u.id === p.responsibleId)?.name ?? "?",
+    },
+    chalet: chalet ? { id: chalet.id, number: chalet.number, name: chalet.name } : null,
+    hasReceipt: p.receiptDataUrl !== null,
+  };
+};
+
+/** Total adiantado (compras vinculadas) por chalé no evento. */
+function advancesByChalet(db: Db, eventId: string): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const p of db.purchases) {
+    if (p.eventId === eventId && p.chaletId) {
+      map.set(p.chaletId, (map.get(p.chaletId) ?? 0) + p.amountCents);
+    }
+  }
+  return map;
+}
+
+/** Gera contas a receber no fechamento: excedente de pago + adiantado sobre o devido. */
+function generateReceivables(db: Db, eventId: string, settlement: DbSettlement): void {
+  db.receivables = db.receivables.filter((r) => r.eventId !== eventId);
+  const advances = advancesByChalet(db, eventId);
+  for (const item of settlement.items) {
+    const paid = db.payments
+      .filter((p) => p.eventId === eventId && p.chaletId === item.chaletId)
+      .reduce((s, p) => s + p.amountCents, 0);
+    const credit = paid + (advances.get(item.chaletId) ?? 0) - item.totalCents;
+    if (credit > 0) {
+      db.receivables.push({
+        id: uid(),
+        eventId,
+        chaletId: item.chaletId,
+        amountCents: credit,
+        status: "OPEN",
+        settledAt: null,
+        notes: null,
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
+}
+
+const receivableResponse = (db: Db, r: DbReceivable) => {
+  const chalet = db.chalets.find((c) => c.id === r.chaletId);
+  return {
+    id: r.id,
+    eventId: r.eventId,
+    eventName: db.events.find((e) => e.id === r.eventId)?.name ?? "?",
+    chaletId: r.chaletId,
+    chaletNumber: chalet?.number ?? 0,
+    chaletName: chalet?.name ?? "?",
+    amountCents: r.amountCents,
+    status: r.status,
+    settledAt: r.settledAt,
+    notes: r.notes,
+    createdAt: r.createdAt,
+  };
+};
 
 const settlementView = (db: Db, s: DbSettlement) => {
   const items = s.items.map((item) => {
@@ -444,8 +521,9 @@ interface DemoRequest {
 function requireEventOpen(db: Db, eventId: string): DbEvent {
   const event = db.events.find((e) => e.id === eventId);
   if (!event) throw new DemoApiError(404, "Evento não encontrado.");
-  if (event.status === "CLOSED") {
-    throw new DemoApiError(409, "Evento encerrado: alterações bloqueadas.");
+  if (event.status !== "OPEN") {
+    const label = event.status === "CLOSED" ? "encerrado" : "cancelado";
+    throw new DemoApiError(409, `Evento ${label}: alterações bloqueadas.`);
   }
   return event;
 }
@@ -569,17 +647,68 @@ function route(db: Db, req: DemoRequest): unknown {
     if (!event) throw new DemoApiError(404, "Evento não encontrado.");
     return event;
   }
+  if (seg[0] === "events" && seg.length === 2 && method === "PATCH") {
+    const event = db.events.find((e) => e.id === seg[1]);
+    if (!event) throw new DemoApiError(404, "Evento não encontrado.");
+    if (event.status === "CLOSED") {
+      throw new DemoApiError(409, "Evento encerrado não pode ser editado. Reabra-o primeiro.");
+    }
+    const start = body.startDate ? String(body.startDate).slice(0, 10) : event.startDate;
+    const end = body.endDate ? String(body.endDate).slice(0, 10) : event.endDate;
+    if (end < start) throw new DemoApiError(422, "Data final deve ser igual ou posterior à inicial.");
+    if (
+      db.events.some((e) => e.id !== event.id && e.startDate <= end && start <= e.endDate)
+    ) {
+      throw new DemoApiError(409, "Já existe um evento neste período.");
+    }
+    if (body.name) event.name = String(body.name);
+    event.startDate = start;
+    event.endDate = end;
+    return event;
+  }
+  if (seg[0] === "events" && seg[2] === "cancel" && method === "POST") {
+    const event = db.events.find((e) => e.id === seg[1]);
+    if (!event) throw new DemoApiError(404, "Evento não encontrado.");
+    if (event.status === "CLOSED") {
+      throw new DemoApiError(409, "Evento encerrado não pode ser cancelado. Reabra-o primeiro.");
+    }
+    if (event.status === "CANCELLED") {
+      throw new DemoApiError(409, "Evento já está cancelado.");
+    }
+    event.status = "CANCELLED";
+    return event;
+  }
+  if (seg[0] === "events" && seg.length === 2 && method === "DELETE") {
+    const event = db.events.find((e) => e.id === seg[1]);
+    if (!event) throw new DemoApiError(404, "Evento não encontrado.");
+    const hasActivity =
+      db.reservations.some((r) => r.eventId === event.id) ||
+      db.purchases.some((p) => p.eventId === event.id) ||
+      db.payments.some((p) => p.eventId === event.id);
+    if (hasActivity) {
+      throw new DemoApiError(
+        409,
+        "Este evento possui reservas, compras ou pagamentos e não pode ser excluído. Cancele-o em vez disso.",
+      );
+    }
+    db.settlements = db.settlements.filter((s) => s.eventId !== event.id);
+    db.receivables = db.receivables.filter((r) => r.eventId !== event.id);
+    db.events = db.events.filter((e) => e.id !== event.id);
+    return undefined;
+  }
   if (seg[0] === "events" && seg[2] === "close" && method === "POST") {
     const event = requireEventOpen(db, seg[1]);
     const settlement = computeSettlement(db, event.id);
     db.settlements = db.settlements.filter((s) => s.eventId !== event.id);
     db.settlements.push(settlement);
+    generateReceivables(db, event.id, settlement);
     event.status = "CLOSED";
     return event;
   }
   if (seg[0] === "events" && seg[2] === "reopen" && method === "POST") {
     const event = db.events.find((e) => e.id === seg[1]);
     if (!event) throw new DemoApiError(404, "Evento não encontrado.");
+    db.receivables = db.receivables.filter((r) => r.eventId !== event.id);
     event.status = "OPEN";
     return event;
   }
@@ -609,18 +738,22 @@ function route(db: Db, req: DemoRequest): unknown {
     if (!settlement) {
       throw new DemoApiError(404, "Rateio ainda não calculado para este evento.");
     }
+    const advances = advancesByChalet(db, seg[1]);
     const view: ChaletPaymentSummary[] = settlementView(db, settlement).items.map((item) => {
       const payments = db.payments.filter(
         (p) => p.eventId === seg[1] && p.chaletId === item.chaletId,
       );
       const paidCents = payments.reduce((s, p) => s + p.amountCents, 0);
+      const advanceCents = advances.get(item.chaletId) ?? 0;
       return {
         chaletId: item.chaletId,
         chaletNumber: item.chaletNumber,
         chaletName: item.chaletName,
         owedCents: item.totalCents,
         paidCents,
-        status: derivePaymentStatus(item.totalCents, paidCents),
+        advanceCents,
+        balanceCents: item.totalCents - paidCents - advanceCents,
+        status: derivePaymentStatus(item.totalCents, paidCents + advanceCents),
         payments: payments.map((p) => ({
           id: p.id,
           date: p.date,
@@ -630,6 +763,28 @@ function route(db: Db, req: DemoRequest): unknown {
       };
     });
     return view;
+  }
+  if (seg[0] === "events" && seg[2] === "receivables" && method === "GET") {
+    return db.receivables
+      .filter((r) => r.eventId === seg[1])
+      .filter((r) => {
+        if (isAdmin) return true;
+        const chalet = db.chalets.find((c) => c.id === r.chaletId);
+        return chalet?.ownerId === user.id;
+      })
+      .map((r) => receivableResponse(db, r));
+  }
+  if (seg[0] === "receivables" && seg[2] === "settle" && method === "PATCH") {
+    if (!isAdmin) throw new DemoApiError(403, "Apenas administradores.");
+    const receivable = db.receivables.find((r) => r.id === seg[1]);
+    if (!receivable) throw new DemoApiError(404, "Crédito não encontrado.");
+    if (receivable.status === "SETTLED") {
+      throw new DemoApiError(409, "Este crédito já foi quitado.");
+    }
+    receivable.status = "SETTLED";
+    receivable.settledAt = new Date().toISOString();
+    if (body?.notes) receivable.notes = String(body.notes);
+    return receivableResponse(db, receivable);
   }
   if (path === "/payments" && method === "POST") {
     db.payments.push({
@@ -646,10 +801,23 @@ function route(db: Db, req: DemoRequest): unknown {
   // ── Reservas ──
   if (path === "/reservations" && method === "GET") {
     let list = db.reservations.slice();
+    // Proprietário vê apenas reservas do(s) próprio(s) chalé(s).
+    if (!isAdmin) {
+      const ownIds = new Set(db.chalets.filter((c) => c.ownerId === user.id).map((c) => c.id));
+      list = list.filter((r) => ownIds.has(r.chaletId));
+    }
     const eventId = query.get("eventId");
     const from = query.get("from");
     const to = query.get("to");
-    if (eventId) list = list.filter((r) => r.eventId === eventId);
+    if (eventId) {
+      list = list.filter((r) => r.eventId === eventId);
+    } else {
+      // Listagens gerais escondem reservas de eventos cancelados.
+      const cancelled = new Set(
+        db.events.filter((e) => e.status === "CANCELLED").map((e) => e.id),
+      );
+      list = list.filter((r) => !cancelled.has(r.eventId));
+    }
     if (from) list = list.filter((r) => r.checkOut >= from.slice(0, 10));
     if (to) list = list.filter((r) => r.checkIn <= to.slice(0, 10));
     list.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
@@ -690,6 +858,29 @@ function route(db: Db, req: DemoRequest): unknown {
     db.reservations.push(reservation);
     return reservationResponse(db, reservation);
   }
+  if (seg[0] === "reservations" && seg.length === 2 && method === "PATCH") {
+    const reservation = db.reservations.find((r) => r.id === seg[1]);
+    if (!reservation) throw new DemoApiError(404, "Reserva não encontrada.");
+    const event = requireEventOpen(db, reservation.eventId);
+    const chalet = db.chalets.find((c) => c.id === reservation.chaletId);
+    if (!isAdmin && reservation.responsibleId !== user.id && chalet?.ownerId !== user.id) {
+      throw new DemoApiError(403, "Você só pode alterar reservas do seu próprio chalé.");
+    }
+    const checkIn = body.checkIn ? String(body.checkIn).slice(0, 10) : reservation.checkIn;
+    const checkOut = body.checkOut ? String(body.checkOut).slice(0, 10) : reservation.checkOut;
+    if (checkIn < event.startDate || checkOut > event.endDate || checkOut < checkIn) {
+      throw new DemoApiError(422, "Entrada e saída devem estar dentro do período do evento.");
+    }
+    reservation.checkIn = checkIn;
+    reservation.checkOut = checkOut;
+    if (body.adults !== undefined) reservation.adults = Number(body.adults);
+    if (body.children !== undefined) reservation.children = Number(body.children);
+    if (body.alcoholConsumers !== undefined) {
+      reservation.alcoholConsumers = Number(body.alcoholConsumers);
+    }
+    if (body.notes !== undefined) reservation.notes = (body.notes as string) || null;
+    return reservationResponse(db, reservation);
+  }
   if (seg[0] === "reservations" && seg.length === 2 && method === "DELETE") {
     const reservation = db.reservations.find((r) => r.id === seg[1]);
     if (!reservation) throw new DemoApiError(404, "Reserva não encontrada.");
@@ -708,14 +899,27 @@ function route(db: Db, req: DemoRequest): unknown {
   }
   if (path === "/purchases" && method === "POST") {
     requireEventOpen(db, String(body.eventId));
+    // Proprietário: compra sempre vinculada ao próprio chalé.
+    let chaletId = body.chaletId ? String(body.chaletId) : null;
+    if (!isAdmin) {
+      const own = db.chalets.find((c) => c.ownerId === user.id);
+      if (!own) {
+        throw new DemoApiError(403, "Você não possui chalé vinculado para lançar compras.");
+      }
+      if (chaletId && chaletId !== own.id) {
+        throw new DemoApiError(403, "Compras de proprietários são vinculadas ao próprio chalé.");
+      }
+      chaletId = own.id;
+    }
     const purchase: DbPurchase = {
       id: uid(),
       eventId: String(body.eventId),
       date: String(body.date).slice(0, 10),
-      description: String(body.description),
+      description: body.description ? String(body.description) : null,
       category: body.category as PurchaseCategory,
       amountCents: Number(body.amountCents),
       responsibleId: user.id,
+      chaletId,
       receiptDataUrl: null,
     };
     db.purchases.push(purchase);
@@ -794,14 +998,16 @@ function route(db: Db, req: DemoRequest): unknown {
             const paid = db.payments
               .filter((p) => p.eventId === event.id && p.chaletId === item.chaletId)
               .reduce((s, p) => s + p.amountCents, 0);
+            const advance = advancesByChalet(db, event.id).get(item.chaletId) ?? 0;
             return {
               chaletNumber: item.chaletNumber,
               chaletName: item.chaletName,
               commonCents: item.commonCents,
               alcoholCents: item.alcoholCents,
               totalCents: item.totalCents,
+              advanceCents: advance,
               paidCents: paid,
-              paymentStatus: derivePaymentStatus(item.totalCents, paid),
+              paymentStatus: derivePaymentStatus(item.totalCents, paid + advance),
             };
           })
         : null,
@@ -813,7 +1019,7 @@ function route(db: Db, req: DemoRequest): unknown {
   if (path === "/dashboard" && method === "GET") {
     const today = new Date().toISOString().slice(0, 10);
     const lastEvent = db.events
-      .slice()
+      .filter((e) => e.status !== "CANCELLED")
       .sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
     let lastEventSummary: DashboardSummary["lastEvent"] = null;
     if (lastEvent) {
@@ -845,7 +1051,12 @@ function route(db: Db, req: DemoRequest): unknown {
         free: db.chalets.filter((c) => c.status === "FREE").length,
       },
       upcomingReservations: db.reservations
-        .filter((r) => r.status === "ACTIVE" && r.checkOut >= today)
+        .filter(
+          (r) =>
+            r.status === "ACTIVE" &&
+            r.checkOut >= today &&
+            db.events.find((e) => e.id === r.eventId)?.status !== "CANCELLED",
+        )
         .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
         .slice(0, 10)
         .map((r) => {

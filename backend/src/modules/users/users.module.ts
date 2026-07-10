@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CreateUserUseCase } from './application/use-cases/create-user.use-case';
+import { DeleteUserUseCase } from './application/use-cases/delete-user.use-case';
 import { ListUsersUseCase } from './application/use-cases/list-users.use-case';
 import { UpdateUserUseCase } from './application/use-cases/update-user.use-case';
 import { UserRepository } from './domain/user.repository';
@@ -13,6 +14,7 @@ import { UsersController } from './presentation/users.controller';
     CreateUserUseCase,
     UpdateUserUseCase,
     ListUsersUseCase,
+    DeleteUserUseCase,
   ],
   exports: [UserRepository],
 })

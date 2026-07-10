@@ -38,12 +38,17 @@ export class DashboardQueryService {
     const [chaletGroups, upcoming, lastEvent] = await Promise.all([
       this.prisma.chalet.groupBy({ by: ['status'], _count: true }),
       this.prisma.reservation.findMany({
-        where: { status: 'ACTIVE', checkOut: { gte: today } },
+        where: {
+          status: 'ACTIVE',
+          checkOut: { gte: today },
+          event: { status: { not: 'CANCELLED' } },
+        },
         include: { chalet: true, responsible: true },
         orderBy: { checkIn: 'asc' },
         take: 10,
       }),
       this.prisma.event.findFirst({
+        where: { status: { not: 'CANCELLED' } },
         orderBy: { startDate: 'desc' },
         include: {
           purchases: { select: { amountCents: true } },

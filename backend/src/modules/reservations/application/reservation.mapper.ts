@@ -3,7 +3,7 @@ import { ReservationDetail } from '../domain/reservation.repository';
 export interface ReservationResponse {
   id: string;
   eventId: string;
-  chalet: { id: string; number: number; name: string };
+  chalet: { id: string; number: number; name: string; ownerId: string | null };
   responsible: { id: string; name: string };
   checkIn: Date;
   checkOut: Date;
@@ -23,6 +23,7 @@ export const toReservationResponse = (
     id: reservation.chalet.id,
     number: reservation.chalet.number,
     name: reservation.chalet.name,
+    ownerId: reservation.chalet.ownerId,
   },
   responsible: {
     id: reservation.responsible.id,

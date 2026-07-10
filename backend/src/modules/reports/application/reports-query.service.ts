@@ -34,6 +34,7 @@ export interface EventReport {
     commonCents: number;
     alcoholCents: number;
     totalCents: number;
+    advanceCents: number;
     paidCents: number;
     paymentStatus: PaymentStatus;
   }> | null;
@@ -110,6 +111,15 @@ export class ReportsQueryService {
         (paidByChalet.get(payment.chaletId) ?? 0) + payment.amountCents,
       );
     }
+    const advanceByChalet = new Map<string, number>();
+    for (const purchase of event.purchases) {
+      if (purchase.chaletId) {
+        advanceByChalet.set(
+          purchase.chaletId,
+          (advanceByChalet.get(purchase.chaletId) ?? 0) + purchase.amountCents,
+        );
+      }
+    }
 
     return {
       event: {
@@ -139,14 +149,19 @@ export class ReportsQueryService {
       settlement:
         event.settlement?.items.map((item) => {
           const paidCents = paidByChalet.get(item.chaletId) ?? 0;
+          const advanceCents = advanceByChalet.get(item.chaletId) ?? 0;
           return {
             chaletNumber: item.chalet.number,
             chaletName: item.chalet.name,
             commonCents: item.commonCents,
             alcoholCents: item.alcoholCents,
             totalCents: item.totalCents,
+            advanceCents,
             paidCents,
-            paymentStatus: derivePaymentStatus(item.totalCents, paidCents),
+            paymentStatus: derivePaymentStatus(
+              item.totalCents,
+              paidCents + advanceCents,
+            ),
           };
         }) ?? null,
     };

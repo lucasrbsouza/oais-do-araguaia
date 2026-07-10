@@ -42,9 +42,9 @@ export function ChaletStatusBadge({ status }: { status: ChaletStatus }) {
 }
 
 export function EventStatusBadge({ status }: { status: EventStatus }) {
-  return (
-    <Badge tone={status === "OPEN" ? "success" : "neutral"}>
-      {status === "OPEN" ? "Aberto" : "Encerrado"}
-    </Badge>
-  );
+  const tone: Tone =
+    status === "OPEN" ? "success" : status === "CANCELLED" ? "danger" : "neutral";
+  const label =
+    status === "OPEN" ? "Aberto" : status === "CANCELLED" ? "Cancelado" : "Encerrado";
+  return <Badge tone={tone}>{label}</Badge>;
 }

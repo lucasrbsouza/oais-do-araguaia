@@ -2,10 +2,12 @@ import { User } from '@prisma/client';
 import * as argon2 from 'argon2';
 import {
   ConflictError,
+  ForbiddenError,
   NotFoundError,
 } from '../../../../shared/domain/domain-error';
 import { UserRepository } from '../../domain/user.repository';
 import { CreateUserUseCase } from './create-user.use-case';
+import { DeleteUserUseCase } from './delete-user.use-case';
 import { ListUsersUseCase } from './list-users.use-case';
 import { UpdateUserUseCase } from './update-user.use-case';
 
@@ -30,6 +32,8 @@ const makeRepo = (overrides: Partial<UserRepository> = {}): UserRepository => ({
     .fn()
     .mockImplementation((_id, data) => Promise.resolve({ ...user, ...data })),
   list: jest.fn().mockResolvedValue([user]),
+  hasHistory: jest.fn().mockResolvedValue(false),
+  delete: jest.fn().mockResolvedValue(undefined),
   ...overrides,
 });
 
@@ -90,6 +94,41 @@ describe('UpdateUserUseCase', () => {
     await expect(
       useCase.execute({ id: 'u1', email: 'em-uso@test.com' }),
     ).rejects.toThrow(ConflictError);
+  });
+});
+
+describe('DeleteUserUseCase', () => {
+  it('exclui usuário sem vínculos', async () => {
+    const repo = makeRepo();
+    const useCase = new DeleteUserUseCase(repo);
+    await useCase.execute({ id: 'u1', currentUserId: 'admin' });
+    expect(repo.delete).toHaveBeenCalledWith('u1');
+  });
+
+  it('bloqueia exclusão do próprio usuário', async () => {
+    const repo = makeRepo();
+    const useCase = new DeleteUserUseCase(repo);
+    await expect(
+      useCase.execute({ id: 'u1', currentUserId: 'u1' }),
+    ).rejects.toThrow(ForbiddenError);
+    expect(repo.delete).not.toHaveBeenCalled();
+  });
+
+  it('falha para usuário inexistente', async () => {
+    const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
+    const useCase = new DeleteUserUseCase(repo);
+    await expect(
+      useCase.execute({ id: 'x', currentUserId: 'admin' }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('bloqueia exclusão de usuário com vínculos', async () => {
+    const repo = makeRepo({ hasHistory: jest.fn().mockResolvedValue(true) });
+    const useCase = new DeleteUserUseCase(repo);
+    await expect(
+      useCase.execute({ id: 'u1', currentUserId: 'admin' }),
+    ).rejects.toThrow(ConflictError);
+    expect(repo.delete).not.toHaveBeenCalled();
   });
 });
 

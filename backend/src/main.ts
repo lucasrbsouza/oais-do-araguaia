@@ -20,6 +20,7 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: config.getOrThrow<string>('CORS_ORIGINS').split(','),
     credentials: true,
+    exposedHeaders: ['Content-Disposition'],
   });
   app.setGlobalPrefix('api', { exclude: ['health'] });
   app.useGlobalPipes(
@@ -34,7 +35,7 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Oaís do Araguaia API')
+    .setTitle('Oasís do Araguaia API')
     .setDescription(
       'Gestão de condomínio de chalés: reservas, compras, rateio e pagamentos.',
     )

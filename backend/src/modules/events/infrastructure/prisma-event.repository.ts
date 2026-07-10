@@ -100,6 +100,47 @@ export class PrismaEventRepository implements EventRepository {
           },
         },
       });
+
+      // Contas a receber: se pagamentos + adiantamentos (compras vinculadas
+      // ao chalé) superam o devido no rateio, o excedente vira crédito.
+      await tx.receivable.deleteMany({ where: { eventId } });
+      const [payments, advances] = await Promise.all([
+        tx.payment.groupBy({
+          by: ['chaletId'],
+          where: { eventId },
+          _sum: { amountCents: true },
+        }),
+        tx.purchase.groupBy({
+          by: ['chaletId'],
+          where: { eventId, chaletId: { not: null } },
+          _sum: { amountCents: true },
+        }),
+      ]);
+      const paidByChalet = new Map(
+        payments.map((p) => [p.chaletId, p._sum.amountCents ?? 0]),
+      );
+      const advanceByChalet = new Map(
+        advances.map((a) => [a.chaletId as string, a._sum.amountCents ?? 0]),
+      );
+      const credits = shares
+        .map((share) => ({
+          chaletId: share.chaletId,
+          amountCents:
+            (paidByChalet.get(share.chaletId) ?? 0) +
+            (advanceByChalet.get(share.chaletId) ?? 0) -
+            share.totalCents,
+        }))
+        .filter((credit) => credit.amountCents > 0);
+      if (credits.length > 0) {
+        await tx.receivable.createMany({
+          data: credits.map((credit) => ({
+            eventId,
+            chaletId: credit.chaletId,
+            amountCents: credit.amountCents,
+          })),
+        });
+      }
+
       return tx.event.update({
         where: { id: eventId },
         data: { status: EventStatus.CLOSED, closedAt: new Date(), closedById },
@@ -108,9 +149,34 @@ export class PrismaEventRepository implements EventRepository {
   }
 
   reopen(eventId: string): Promise<Event> {
+    return this.prisma.$transaction(async (tx) => {
+      // Créditos são recalculados no próximo fechamento.
+      await tx.receivable.deleteMany({ where: { eventId } });
+      return tx.event.update({
+        where: { id: eventId },
+        data: { status: EventStatus.OPEN, closedAt: null, closedById: null },
+      });
+    });
+  }
+
+  cancel(eventId: string): Promise<Event> {
     return this.prisma.event.update({
       where: { id: eventId },
-      data: { status: EventStatus.OPEN, closedAt: null, closedById: null },
+      data: { status: EventStatus.CANCELLED },
     });
+  }
+
+  async hasActivity(eventId: string): Promise<boolean> {
+    const [reservations, purchases, payments] = await Promise.all([
+      this.prisma.reservation.count({ where: { eventId } }),
+      this.prisma.purchase.count({ where: { eventId } }),
+      this.prisma.payment.count({ where: { eventId } }),
+    ]);
+    return reservations + purchases + payments > 0;
+  }
+
+  async delete(eventId: string): Promise<void> {
+    // Settlement e receivables caem por cascade.
+    await this.prisma.event.delete({ where: { id: eventId } });
   }
 }

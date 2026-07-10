@@ -43,9 +43,11 @@ export interface UpdateReservationInput {
 }
 
 function ensureEventOpen(event: Event): void {
-  if (event.status === EventStatus.CLOSED) {
+  if (event.status !== EventStatus.OPEN) {
+    const label =
+      event.status === EventStatus.CLOSED ? 'encerrado' : 'cancelado';
     throw new ConflictError(
-      'Evento encerrado: reservas não podem ser alteradas.',
+      `Evento ${label}: reservas não podem ser alteradas.`,
     );
   }
 }
@@ -209,8 +211,11 @@ export class ListReservationsUseCase {
 
   async execute(
     filter: ListReservationsFilter,
+    user: AuthenticatedUser,
   ): Promise<ReservationResponse[]> {
-    const reservations = await this.reservationRepository.list(filter);
+    // Proprietário e Admin vêem todas as reservas (visão geral).
+    const effectiveFilter = filter;
+    const reservations = await this.reservationRepository.list(effectiveFilter);
     return reservations.map(toReservationResponse);
   }
 }

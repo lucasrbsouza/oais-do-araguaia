@@ -153,6 +153,38 @@ export async function logout(): Promise<void> {
   useSession.getState().clearSession();
 }
 
+/** Baixa um arquivo autenticado (ex.: export XLSX/PDF) e dispara o download no navegador. */
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  if (IS_DEMO) {
+    throw new ApiError(501, "Exportação não disponível no protótipo.");
+  }
+
+  let res = await rawRequest(path, {});
+  if (res.status === 401) {
+    const refreshed = await tryRefreshSession();
+    if (!refreshed) {
+      useSession.getState().clearSession();
+      throw new ApiError(401, "Sessão expirada. Faça login novamente.");
+    }
+    res = await rawRequest(path, {});
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, "Não foi possível gerar o arquivo.");
+  }
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? fallbackName;
+
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 /** Resolve a URL do comprovante para abrir em nova aba (real ou demo). */
 export async function getReceiptUrl(purchaseId: string): Promise<string | null> {
   if (IS_DEMO) {

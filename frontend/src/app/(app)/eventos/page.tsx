@@ -12,7 +12,7 @@ import { formatCents, formatDate } from "@/lib/format";
 import type { EventItem, Paginated } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { EventStatusBadge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/input";
 import { Table, Td, Th } from "@/components/ui/table";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/states";
@@ -56,11 +56,16 @@ function TabCell({
 
 export default function EventsPage() {
   const { user } = useSession();
+  const isAdmin = user?.role === "ADMIN";
   const router = useRouter();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [formError, setFormError] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<EventItem | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<EventItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EventItem | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["events", page],
@@ -68,16 +73,65 @@ export default function EventsPage() {
   });
 
   const form = useForm<FormData>({ resolver: zodResolver(schema) });
+  const editForm = useForm<FormData>({ resolver: zodResolver(schema) });
+
+  const invalidate = (): void => {
+    void queryClient.invalidateQueries({ queryKey: ["events"] });
+  };
 
   const createMutation = useMutation({
     mutationFn: (payload: FormData) => api<EventItem>("/events", { method: "POST", body: payload }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["events"] });
+      invalidate();
       setOpen(false);
       form.reset();
     },
     onError: (err: Error) => setFormError(err.message),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...payload }: FormData & { id: string }) =>
+      api<EventItem>(`/events/${id}`, { method: "PATCH", body: payload }),
+    onSuccess: () => {
+      invalidate();
+      setEditTarget(null);
+    },
+    onError: (err: Error) => setFormError(err.message),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => api<EventItem>(`/events/${id}/cancel`, { method: "POST" }),
+    onSuccess: () => {
+      invalidate();
+      setCancelTarget(null);
+    },
+    onError: (err: Error) => {
+      setCancelTarget(null);
+      setListError(err.message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api<void>(`/events/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidate();
+      setDeleteTarget(null);
+    },
+    onError: (err: Error) => {
+      setDeleteTarget(null);
+      setListError(err.message);
+    },
+  });
+
+  const openEdit = (event: EventItem): void => {
+    setFormError(null);
+    editForm.reset({
+      name: event.name,
+      startDate: event.startDate.slice(0, 10),
+      endDate: event.endDate.slice(0, 10),
+    });
+    setEditTarget(event);
+  };
 
   if (isLoading) return <TableSkeleton rows={6} />;
   if (error) return <ErrorState message={(error as Error).message} />;
@@ -88,8 +142,10 @@ export default function EventsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-ink">Eventos</h1>
-        {user?.role === "ADMIN" && <Button onClick={() => setOpen(true)}>Novo evento</Button>}
+        {isAdmin && <Button onClick={() => setOpen(true)}>Novo evento</Button>}
       </div>
+
+      {listError && <ErrorState message={listError} />}
 
       {data?.data.length === 0 ? (
         <EmptyState
@@ -106,6 +162,7 @@ export default function EventsPage() {
               <Th>Compras</Th>
               <Th>Rateio</Th>
               <Th>Status</Th>
+              {isAdmin && <Th className="w-52">Ações</Th>}
             </tr>
           </thead>
           <tbody>
@@ -139,6 +196,40 @@ export default function EventsPage() {
                 <Td>
                   <EventStatusBadge status={event.status} />
                 </Td>
+                {isAdmin && (
+                  <Td onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1">
+                      {event.status !== "CLOSED" && (
+                        <Button variant="ghost" size="xs" onClick={() => openEdit(event)}>
+                          Editar
+                        </Button>
+                      )}
+                      {event.status === "OPEN" && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => {
+                            setListError(null);
+                            setCancelTarget(event);
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="text-error"
+                        onClick={() => {
+                          setListError(null);
+                          setDeleteTarget(event);
+                        }}
+                      >
+                        Excluir
+                      </Button>
+                    </div>
+                  </Td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -202,6 +293,84 @@ export default function EventsPage() {
           </div>
         </form>
       </Dialog>
+
+      {/* Editar (admin) */}
+      <Dialog
+        open={editTarget !== null}
+        onClose={() => setEditTarget(null)}
+        title="Editar evento"
+      >
+        <form
+          className="space-y-4"
+          onSubmit={editForm.handleSubmit((payload) => {
+            if (!editTarget) return;
+            setFormError(null);
+            updateMutation.mutate({ id: editTarget.id, ...payload });
+          })}
+          noValidate
+        >
+          {formError && <ErrorState message={formError} />}
+          <Field
+            label="Nome"
+            error={editForm.formState.errors.name?.message}
+            {...editForm.register("name")}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Field
+              label="Início"
+              type="date"
+              error={editForm.formState.errors.startDate?.message}
+              {...editForm.register("startDate")}
+            />
+            <Field
+              label="Fim"
+              type="date"
+              error={editForm.formState.errors.endDate?.message}
+              {...editForm.register("endDate")}
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => setEditTarget(null)}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={updateMutation.isPending}>
+              Salvar
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Cancelar (admin) */}
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => cancelTarget && cancelMutation.mutate(cancelTarget.id)}
+        title="Cancelar evento"
+        description={
+          cancelTarget
+            ? `Cancelar o evento "${cancelTarget.name}"? Reservas, compras e rateio ficam bloqueados enquanto o evento estiver cancelado. É possível reabri-lo depois.`
+            : ""
+        }
+        confirmLabel="Cancelar evento"
+        destructive
+        loading={cancelMutation.isPending}
+      />
+
+      {/* Excluir (admin) */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title="Excluir evento"
+        description={
+          deleteTarget
+            ? `Excluir o evento "${deleteTarget.name}"? Eventos com reservas, compras ou pagamentos não podem ser excluídos. Esta ação não pode ser desfeita.`
+            : ""
+        }
+        confirmLabel="Excluir"
+        destructive
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import type { Chalet, ChaletStatus, UserItem } from "@/lib/types";
 import { CHALET_STATUS_LABELS } from "@/lib/types";
@@ -38,11 +38,18 @@ export default function ChaletsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Chalet | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  const [filterMyChalets, setFilterMyChalets] = useState(false);
 
   const { data: chalets, isLoading, error } = useQuery({
     queryKey: ["chalets"],
     queryFn: () => api<Chalet[]>("/chalets"),
   });
+
+  const filteredChalets = useMemo(() => {
+    if (!chalets) return [];
+    if (!filterMyChalets) return chalets;
+    return chalets.filter((c) => c.owner?.id === user?.id);
+  }, [chalets, filterMyChalets, user?.id]);
   const { data: users } = useQuery({
     queryKey: ["users"],
     queryFn: () => api<UserItem[]>("/users"),
@@ -122,18 +129,43 @@ export default function ChaletsPage() {
 
       {listError && <ErrorState message={listError} />}
 
-      <Table>
-        <thead>
-          <tr>
-            <Th>Nº</Th>
-            <Th>Nome</Th>
-            <Th>Proprietário</Th>
-            <Th>Status</Th>
-            <Th className="w-36">Ações</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {chalets?.map((chalet) => (
+      {chalets && chalets.length > 0 && (
+        <div className="flex items-center gap-2 bg-surface-soft p-3 rounded-md border border-hairline max-w-xs">
+          <input
+            type="checkbox"
+            id="filter-my-chalets"
+            checked={filterMyChalets}
+            onChange={(e) => setFilterMyChalets(e.target.checked)}
+            className="rounded-xs border-hairline text-primary focus:ring-primary size-4 accent-primary cursor-pointer"
+          />
+          <label htmlFor="filter-my-chalets" className="text-sm text-ink font-medium select-none cursor-pointer">
+            Meus chalés
+          </label>
+        </div>
+      )}
+
+      {filteredChalets.length === 0 ? (
+        <div className="py-12 flex flex-col items-center justify-center border border-hairline border-dashed rounded-md bg-canvas gap-3">
+          <p className="text-sm text-muted">Nenhum chalé atende a este filtro.</p>
+          {filterMyChalets && (
+            <Button variant="secondary" size="xs" onClick={() => setFilterMyChalets(false)}>
+              Ver todos os chalés
+            </Button>
+          )}
+        </div>
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Nº</Th>
+              <Th>Nome</Th>
+              <Th>Proprietário</Th>
+              <Th>Status</Th>
+              <Th className="w-36">Ações</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredChalets.map((chalet) => (
             <tr key={chalet.id} className="hover:bg-surface-soft/60">
               <Td className="font-semibold text-ink">{chalet.number}</Td>
               <Td>{chalet.name}</Td>
@@ -180,9 +212,10 @@ export default function ChaletsPage() {
                 </div>
               </Td>
             </tr>
-          ))}
-        </tbody>
-      </Table>
+            ))}
+          </tbody>
+        </Table>
+      )}
 
       {/* Criar (admin) */}
       <Dialog open={create !== null} onClose={() => setCreate(null)} title="Novo chalé">

@@ -7,10 +7,12 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, ApiError } from "@/lib/api";
 import { formatCents, formatDate, parseBRLToCents } from "@/lib/format";
-import type { ChaletPaymentSummary } from "@/lib/types";
+import type { ChaletPaymentSummary, Receivable } from "@/lib/types";
+import { RECEIVABLE_STATUS_LABELS } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { PaymentStatusBadge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { Badge, PaymentStatusBadge } from "@/components/ui/badge";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/input";
 import { Table, Td, Th } from "@/components/ui/table";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/states";
@@ -25,8 +27,46 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
+type AccountsView = "payable" | "receivable";
 
 export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }) {
+  const [view, setView] = useState<AccountsView>("payable");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 border-b border-hairline" role="tablist" aria-label="Contas">
+        {(
+          [
+            ["payable", "Contas a Pagar"],
+            ["receivable", "Contas a Receber"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={view === key}
+            onClick={() => setView(key)}
+            className={cn(
+              "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+              view === key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted hover:text-ink",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {view === "payable" ? (
+        <PayableView eventId={eventId} isAdmin={isAdmin} />
+      ) : (
+        <ReceivableView eventId={eventId} isAdmin={isAdmin} />
+      )}
+    </div>
+  );
+}
+
+function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }) {
   const queryClient = useQueryClient();
   const [payTarget, setPayTarget] = useState<ChaletPaymentSummary | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -53,6 +93,7 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["payments", eventId] });
+      void queryClient.invalidateQueries({ queryKey: ["receivables", eventId] });
       setPayTarget(null);
       form.reset();
     },
@@ -65,7 +106,7 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
     return (
       <EmptyState
         title="Rateio ainda não calculado"
-        description="Os pagamentos ficam disponíveis após o cálculo do rateio."
+        description="As contas a pagar ficam disponíveis após o cálculo do rateio."
       />
     );
   }
@@ -73,12 +114,17 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-muted">
+        Saldo = devido no rateio − pagamentos − compras/adiantamentos vinculados ao chalé.
+      </p>
       <Table>
         <thead>
           <tr>
             <Th>Chalé</Th>
             <Th className="text-right">Devido</Th>
+            <Th className="text-right">Adiantamentos</Th>
             <Th className="text-right">Pago</Th>
+            <Th className="text-right">Saldo</Th>
             <Th>Status</Th>
             <Th>Pagamentos</Th>
             {isAdmin && <Th className="w-32">Ações</Th>}
@@ -91,7 +137,18 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
                 {item.chaletNumber} — {item.chaletName}
               </Td>
               <Td className="text-right">{formatCents(item.owedCents)}</Td>
+              <Td className="text-right">{formatCents(item.advanceCents)}</Td>
               <Td className="text-right">{formatCents(item.paidCents)}</Td>
+              <Td
+                className={cn(
+                  "text-right font-semibold",
+                  item.balanceCents > 0 ? "text-error" : "text-success",
+                )}
+              >
+                {item.balanceCents < 0
+                  ? `${formatCents(-item.balanceCents)} (crédito)`
+                  : formatCents(item.balanceCents)}
+              </Td>
               <Td>
                 <PaymentStatusBadge status={item.status} />
               </Td>
@@ -111,7 +168,7 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
               </Td>
               {isAdmin && (
                 <Td>
-                  {item.status !== "PAID" && (
+                  {item.balanceCents > 0 && (
                     <Button
                       variant="ghost"
                       size="xs"
@@ -149,7 +206,7 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
             <p className="text-sm text-muted">
               Saldo devedor:{" "}
               <span className="font-semibold text-ink">
-                {formatCents(payTarget.owedCents - payTarget.paidCents)}
+                {formatCents(payTarget.balanceCents)}
               </span>
             </p>
             <div className="grid grid-cols-2 gap-4">
@@ -179,6 +236,116 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
           </form>
         )}
       </Dialog>
+    </div>
+  );
+}
+
+function ReceivableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }) {
+  const queryClient = useQueryClient();
+  const [settleTarget, setSettleTarget] = useState<Receivable | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["receivables", eventId],
+    queryFn: () => api<Receivable[]>(`/events/${eventId}/receivables`),
+  });
+
+  const settleMutation = useMutation({
+    mutationFn: (id: string) =>
+      api<Receivable>(`/receivables/${id}/settle`, { method: "PATCH", body: {} }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["receivables", eventId] });
+      setSettleTarget(null);
+    },
+    onError: (err: Error) => {
+      setSettleTarget(null);
+      setActionError(err.message);
+    },
+  });
+
+  if (isLoading) return <TableSkeleton />;
+  if (error) return <ErrorState message={(error as Error).message} />;
+
+  if (!data || data.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhum crédito a receber"
+        description="Créditos são gerados automaticamente ao encerrar o evento, quando adiantamentos e pagamentos de um chalé superam o valor devido no rateio."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {actionError && <ErrorState message={actionError} />}
+      <p className="text-sm text-muted">
+        Valores que os chalés têm a receber de volta (crédito gerado no fechamento do evento).
+      </p>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Chalé</Th>
+            <Th className="text-right">Valor do crédito</Th>
+            <Th>Gerado em</Th>
+            <Th>Status</Th>
+            <Th>Observações</Th>
+            {isAdmin && <Th className="w-40">Ações</Th>}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((r) => (
+            <tr key={r.id}>
+              <Td className="font-medium text-ink">
+                {r.chaletNumber} — {r.chaletName}
+              </Td>
+              <Td className="text-right font-semibold text-success">
+                {formatCents(r.amountCents)}
+              </Td>
+              <Td>{formatDate(r.createdAt)}</Td>
+              <Td>
+                <Badge tone={r.status === "SETTLED" ? "success" : "warning"}>
+                  {RECEIVABLE_STATUS_LABELS[r.status]}
+                </Badge>
+              </Td>
+              <Td>
+                {r.settledAt
+                  ? `Quitado em ${formatDate(r.settledAt)}${r.notes ? ` · ${r.notes}` : ""}`
+                  : (r.notes ?? "—")}
+              </Td>
+              {isAdmin && (
+                <Td>
+                  {r.status === "OPEN" && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => {
+                        setActionError(null);
+                        setSettleTarget(r);
+                      }}
+                    >
+                      Registrar devolução
+                    </Button>
+                  )}
+                </Td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+
+      <ConfirmDialog
+        open={settleTarget !== null}
+        onClose={() => setSettleTarget(null)}
+        onConfirm={() => settleTarget && settleMutation.mutate(settleTarget.id)}
+        title="Registrar devolução"
+        description={
+          settleTarget
+            ? `Confirmar devolução de ${formatCents(settleTarget.amountCents)} ao chalé ${settleTarget.chaletNumber} — ${settleTarget.chaletName}?`
+            : ""
+        }
+        confirmLabel="Confirmar"
+        loading={settleMutation.isPending}
+      />
     </div>
   );
 }

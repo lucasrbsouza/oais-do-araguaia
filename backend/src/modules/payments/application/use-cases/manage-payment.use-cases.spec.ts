@@ -10,6 +10,7 @@ import {
   SettlementRepository,
   SettlementView,
 } from '../../../settlement/domain/settlement.repository';
+import { PurchaseRepository } from '../../../purchases/domain/purchase.repository';
 import { PaymentRepository } from '../../domain/payment.repository';
 import {
   GetEventPaymentsUseCase,
@@ -77,6 +78,16 @@ const settlementRepo = {
   findByEvent: jest.fn().mockResolvedValue(settlement),
 } as unknown as SettlementRepository;
 
+const purchaseRepo = {
+  advancesByEvent: jest.fn().mockResolvedValue([]),
+} as unknown as PurchaseRepository;
+
+const purchaseRepoWithAdvances = {
+  advancesByEvent: jest
+    .fn()
+    .mockResolvedValue([{ chaletId: 'c2', totalCents: 1500 }]),
+} as unknown as PurchaseRepository;
+
 const chaletRepo = {
   findById: jest.fn().mockResolvedValue({ id: 'c1' }),
   findByOwner: jest.fn().mockResolvedValue([{ id: 'c1' }]),
@@ -123,6 +134,7 @@ describe('GetEventPaymentsUseCase', () => {
   it('admin vê todos os chalés com status derivado', async () => {
     const useCase = new GetEventPaymentsUseCase(
       paymentRepo,
+      purchaseRepo,
       settlementRepo,
       chaletRepo,
     );
@@ -131,6 +143,8 @@ describe('GetEventPaymentsUseCase', () => {
     expect(result[0]).toMatchObject({
       chaletId: 'c1',
       paidCents: 500,
+      advanceCents: 0,
+      balanceCents: 1500,
       status: 'PARTIAL',
     });
     expect(result[1]).toMatchObject({
@@ -140,9 +154,27 @@ describe('GetEventPaymentsUseCase', () => {
     });
   });
 
+  it('adiantamentos abatem o saldo e compõem o status', async () => {
+    const useCase = new GetEventPaymentsUseCase(
+      paymentRepo,
+      purchaseRepoWithAdvances,
+      settlementRepo,
+      chaletRepo,
+    );
+    const result = await useCase.execute('e1', admin);
+    // c2 deve 1000, adiantou 1500 → quitado com crédito de 500.
+    expect(result[1]).toMatchObject({
+      chaletId: 'c2',
+      advanceCents: 1500,
+      balanceCents: -500,
+      status: 'PAID',
+    });
+  });
+
   it('proprietário vê apenas o próprio chalé', async () => {
     const useCase = new GetEventPaymentsUseCase(
       paymentRepo,
+      purchaseRepo,
       settlementRepo,
       chaletRepo,
     );
@@ -152,16 +184,22 @@ describe('GetEventPaymentsUseCase', () => {
   });
 
   it('proprietário sem chalé no rateio é bloqueado', async () => {
-    const useCase = new GetEventPaymentsUseCase(paymentRepo, settlementRepo, {
-      ...chaletRepo,
-      findByOwner: jest.fn().mockResolvedValue([]),
-    } as unknown as ChaletRepository);
+    const useCase = new GetEventPaymentsUseCase(
+      paymentRepo,
+      purchaseRepo,
+      settlementRepo,
+      {
+        ...chaletRepo,
+        findByOwner: jest.fn().mockResolvedValue([]),
+      } as unknown as ChaletRepository,
+    );
     await expect(useCase.execute('e1', owner)).rejects.toThrow(ForbiddenError);
   });
 
   it('falha sem rateio calculado', async () => {
     const useCase = new GetEventPaymentsUseCase(
       paymentRepo,
+      purchaseRepo,
       {
         findByEvent: jest.fn().mockResolvedValue(null),
       } as unknown as SettlementRepository,

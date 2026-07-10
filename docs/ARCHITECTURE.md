@@ -1,4 +1,4 @@
-# Arquitetura — Oaís do Araguaia
+# Arquitetura — Oasís do Araguaia
 
 ## Visão geral
 

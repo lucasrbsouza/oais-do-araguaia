@@ -6,7 +6,7 @@ import { Providers } from "./providers";
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Oaís do Araguaia",
+  title: "Oasís do Araguaia",
   description: "Gestão do condomínio de chalés: reservas, compras, rateio e pagamentos.",
 };
 

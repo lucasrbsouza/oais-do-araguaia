@@ -9,10 +9,13 @@ import { SettlementRepository } from '../../../settlement/domain/settlement.repo
 import { WeightedExpenseSharingStrategy } from '../../../settlement/domain/weighted-expense-sharing.strategy';
 import { EventRepository } from '../../domain/event.repository';
 import {
+  CancelEventUseCase,
   CloseEventUseCase,
   CreateEventUseCase,
+  DeleteEventUseCase,
   GetEventUseCase,
   ReopenEventUseCase,
+  UpdateEventUseCase,
 } from './manage-event.use-cases';
 
 const openEvent = {
@@ -28,17 +31,21 @@ const openEvent = {
 } as Event;
 
 const closedEvent = { ...openEvent, status: 'CLOSED' } as Event;
+const cancelledEvent = { ...openEvent, status: 'CANCELLED' } as Event;
 
 const makeEventRepo = (
   overrides: Partial<EventRepository> = {},
 ): EventRepository => ({
   findById: jest.fn().mockResolvedValue(openEvent),
   create: jest.fn().mockResolvedValue(openEvent),
-  update: jest.fn(),
+  update: jest.fn().mockResolvedValue(openEvent),
   list: jest.fn(),
   findOverlapping: jest.fn().mockResolvedValue([]),
   closeWithSettlement: jest.fn().mockResolvedValue(closedEvent),
   reopen: jest.fn().mockResolvedValue(openEvent),
+  cancel: jest.fn().mockResolvedValue(cancelledEvent),
+  hasActivity: jest.fn().mockResolvedValue(false),
+  delete: jest.fn().mockResolvedValue(undefined),
   ...overrides,
 });
 
@@ -144,6 +151,117 @@ describe('CloseEventUseCase', () => {
       audit,
     );
     await expect(useCase.execute('e1', 'admin')).rejects.toThrow(ConflictError);
+  });
+});
+
+describe('UpdateEventUseCase', () => {
+  it('atualiza nome e datas de evento aberto', async () => {
+    const repo = makeEventRepo();
+    const useCase = new UpdateEventUseCase(repo);
+    await useCase.execute({
+      id: 'e1',
+      name: 'Novo nome',
+      startDate: new Date('2030-02-01'),
+      endDate: new Date('2030-02-03'),
+    });
+    expect(repo.update).toHaveBeenCalledWith('e1', {
+      name: 'Novo nome',
+      startDate: new Date('2030-02-01'),
+      endDate: new Date('2030-02-03'),
+    });
+  });
+
+  it('bloqueia edição de evento encerrado', async () => {
+    const repo = makeEventRepo({
+      findById: jest.fn().mockResolvedValue(closedEvent),
+    });
+    const useCase = new UpdateEventUseCase(repo);
+    await expect(
+      useCase.execute({ id: 'e1', name: 'X' }),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('bloqueia sobreposição com outro evento ao mudar datas', async () => {
+    const repo = makeEventRepo({
+      findOverlapping: jest
+        .fn()
+        .mockResolvedValue([{ ...openEvent, id: 'e2', name: 'Outro' }]),
+    });
+    const useCase = new UpdateEventUseCase(repo);
+    await expect(
+      useCase.execute({ id: 'e1', startDate: new Date('2030-01-05') }),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('rejeita intervalo invertido', async () => {
+    const useCase = new UpdateEventUseCase(makeEventRepo());
+    await expect(
+      useCase.execute({ id: 'e1', startDate: new Date('2030-01-10') }),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it('falha para evento inexistente', async () => {
+    const repo = makeEventRepo({ findById: jest.fn().mockResolvedValue(null) });
+    const useCase = new UpdateEventUseCase(repo);
+    await expect(useCase.execute({ id: 'x', name: 'Y' })).rejects.toThrow(
+      NotFoundError,
+    );
+  });
+});
+
+describe('CancelEventUseCase', () => {
+  it('cancela evento aberto com auditoria', async () => {
+    const repo = makeEventRepo();
+    const useCase = new CancelEventUseCase(repo, audit);
+    const result = await useCase.execute('e1', 'admin');
+    expect(repo.cancel).toHaveBeenCalledWith('e1');
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'EVENT_CANCELLED' }),
+    );
+    expect(result.status).toBe('CANCELLED');
+  });
+
+  it('não cancela evento encerrado', async () => {
+    const repo = makeEventRepo({
+      findById: jest.fn().mockResolvedValue(closedEvent),
+    });
+    const useCase = new CancelEventUseCase(repo, audit);
+    await expect(useCase.execute('e1', 'admin')).rejects.toThrow(ConflictError);
+  });
+
+  it('não cancela evento já cancelado', async () => {
+    const repo = makeEventRepo({
+      findById: jest.fn().mockResolvedValue(cancelledEvent),
+    });
+    const useCase = new CancelEventUseCase(repo, audit);
+    await expect(useCase.execute('e1', 'admin')).rejects.toThrow(ConflictError);
+  });
+});
+
+describe('DeleteEventUseCase', () => {
+  it('exclui evento sem movimentação, com auditoria', async () => {
+    const repo = makeEventRepo();
+    const useCase = new DeleteEventUseCase(repo, audit);
+    await useCase.execute('e1', 'admin');
+    expect(repo.delete).toHaveBeenCalledWith('e1');
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'EVENT_DELETED' }),
+    );
+  });
+
+  it('bloqueia exclusão de evento com movimentação', async () => {
+    const repo = makeEventRepo({
+      hasActivity: jest.fn().mockResolvedValue(true),
+    });
+    const useCase = new DeleteEventUseCase(repo, audit);
+    await expect(useCase.execute('e1', 'admin')).rejects.toThrow(ConflictError);
+    expect(repo.delete).not.toHaveBeenCalled();
+  });
+
+  it('falha para evento inexistente', async () => {
+    const repo = makeEventRepo({ findById: jest.fn().mockResolvedValue(null) });
+    const useCase = new DeleteEventUseCase(repo, audit);
+    await expect(useCase.execute('x', 'admin')).rejects.toThrow(NotFoundError);
   });
 });
 
