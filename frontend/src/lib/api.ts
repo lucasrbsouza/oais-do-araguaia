@@ -16,7 +16,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   formData?: FormData;
 }
@@ -66,7 +66,7 @@ async function rawRequest(path: string, options: RequestOptions): Promise<Respon
 }
 
 async function demoRequest<T>(path: string, options: RequestOptions): Promise<T> {
-  const { demoApi, demoAttachReceipt, DemoApiError } = await import(
+  const { demoApi, demoAttachReceipt, demoSetAvatar, DemoApiError } = await import(
     "@/lib/demo/demo-backend"
   );
   try {
@@ -75,6 +75,11 @@ async function demoRequest<T>(path: string, options: RequestOptions): Promise<T>
       const file = options.formData.get("file");
       if (!(file instanceof File)) throw new ApiError(422, "Arquivo inválido.");
       return (await demoAttachReceipt(receiptMatch[1], file)) as T;
+    }
+    if (path.split("?")[0] === "/users/me/avatar" && options.formData) {
+      const file = options.formData.get("file");
+      if (!(file instanceof File)) throw new ApiError(422, "Arquivo inválido.");
+      return (await demoSetAvatar(file)) as T;
     }
     return demoApi(path, options.method ?? "GET", options.body) as T;
   } catch (err) {
@@ -183,6 +188,21 @@ export async function downloadFile(path: string, fallbackName: string): Promise<
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Resolve a URL da foto de perfil de um usuário (real ou demo). */
+export async function getAvatarUrl(userId: string): Promise<string | null> {
+  if (IS_DEMO) {
+    const { demoAvatarUrl } = await import("@/lib/demo/demo-backend");
+    return demoAvatarUrl(userId);
+  }
+  const { accessToken } = useSession.getState();
+  const res = await fetch(`${BASE_URL}/api/users/${userId}/avatar`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    credentials: "include",
+  });
+  if (!res.ok) return null;
+  return URL.createObjectURL(await res.blob());
 }
 
 /** Resolve a URL do comprovante para abrir em nova aba (real ou demo). */

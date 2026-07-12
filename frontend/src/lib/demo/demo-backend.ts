@@ -15,6 +15,7 @@ import type {
   ReceivableStatus,
   Role,
   SessionUser,
+  SettlementAutoMode,
 } from "@/lib/types";
 
 const STORAGE_KEY = "oais-demo-db-v1";
@@ -38,6 +39,9 @@ interface DbUser {
   password: string;
   role: Role;
   active: boolean;
+  phone?: string | null;
+  avatarDataUrl?: string | null;
+  mustChangePassword?: boolean;
   createdAt: string;
 }
 
@@ -55,6 +59,9 @@ interface DbEvent {
   startDate: string;
   endDate: string;
   status: EventStatus;
+  /** Rateio automático (ausente = MANUAL, para bases antigas no localStorage). */
+  settlementAutoMode?: SettlementAutoMode;
+  settlementAutoMinutes?: number | null;
 }
 
 interface DbReservation {
@@ -117,6 +124,17 @@ interface DbPayment {
   notes: string | null;
 }
 
+interface DbAudit {
+  id: string;
+  userId: string | null;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  metadata: Record<string, unknown> | null;
+  ip: string | null;
+  createdAt: string;
+}
+
 interface Db {
   users: DbUser[];
   chalets: DbChalet[];
@@ -126,6 +144,7 @@ interface Db {
   settlements: DbSettlement[];
   payments: DbPayment[];
   receivables: DbReceivable[];
+  audit: DbAudit[];
   eventSeq: number;
 }
 
@@ -231,6 +250,7 @@ function seed(): Db {
     settlements: [],
     payments: [],
     receivables: [],
+    audit: [],
     eventSeq: 1,
   };
 }
@@ -253,8 +273,9 @@ function loadDb(): Db {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const db = JSON.parse(raw) as Db;
-      // bancos salvos antes das contas a receber
+      // bancos salvos antes das contas a receber / auditoria
       db.receivables ??= [];
+      db.audit ??= [];
       return db;
     }
   } catch {
@@ -276,25 +297,64 @@ export function demoLogin(email: string, password: string): SessionUser {
   const db = loadDb();
   const user = db.users.find((u) => u.email === email && u.active);
   if (!user || user.password !== password) {
+    logAudit(db, null, "AUTH_LOGIN_FAILED", "Auth", null, { email });
+    saveDb(db);
     throw new DemoApiError(401, "Credenciais inválidas. Use admin@demo.com / demo1234.");
   }
+  logAudit(db, user.id, "AUTH_LOGIN", "Auth", user.id);
+  saveDb(db);
   const session: SessionUser = {
     id: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    phone: user.phone ?? null,
+    hasAvatar: Boolean(user.avatarDataUrl),
+    mustChangePassword: user.mustChangePassword ?? false,
   };
   window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }
 
+/** Atualiza a sessão salva após mudanças no próprio perfil. */
+function syncSession(db: Db, userId: string): void {
+  const session = demoSession();
+  if (!session || session.id !== userId) return;
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) return;
+  const updated: SessionUser = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    phone: user.phone ?? null,
+    hasAvatar: Boolean(user.avatarDataUrl),
+    mustChangePassword: user.mustChangePassword ?? false,
+  };
+  window.localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+}
+
 export function demoSession(): SessionUser | null {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(SESSION_KEY);
-  return raw ? (JSON.parse(raw) as SessionUser) : null;
+  if (!raw) return null;
+  // Sessões antigas podem não ter os campos de perfil — normaliza.
+  const parsed = JSON.parse(raw) as Partial<SessionUser> & SessionUser;
+  return {
+    ...parsed,
+    phone: parsed.phone ?? null,
+    hasAvatar: parsed.hasAvatar ?? false,
+    mustChangePassword: parsed.mustChangePassword ?? false,
+  };
 }
 
 export function demoLogout(): void {
+  const session = demoSession();
+  if (session) {
+    const db = loadDb();
+    logAudit(db, session.id, "AUTH_LOGOUT", "Auth", session.id);
+    saveDb(db);
+  }
   window.localStorage.removeItem(SESSION_KEY);
 }
 
@@ -433,15 +493,29 @@ function advancesByChalet(db: Db, eventId: string): Map<string, number> {
   return map;
 }
 
-/** Gera contas a receber no fechamento: excedente de pago + adiantado sobre o devido. */
+/**
+ * Gera contas a receber a cada rateio: excedente de pago + adiantado sobre
+ * o devido. Devoluções já quitadas ficam no histórico e abatem o crédito.
+ */
 function generateReceivables(db: Db, eventId: string, settlement: DbSettlement): void {
-  db.receivables = db.receivables.filter((r) => r.eventId !== eventId);
+  db.receivables = db.receivables.filter(
+    (r) => !(r.eventId === eventId && r.status === "OPEN"),
+  );
   const advances = advancesByChalet(db, eventId);
   for (const item of settlement.items) {
     const paid = db.payments
       .filter((p) => p.eventId === eventId && p.chaletId === item.chaletId)
       .reduce((s, p) => s + p.amountCents, 0);
-    const credit = paid + (advances.get(item.chaletId) ?? 0) - item.totalCents;
+    const settledSum = db.receivables
+      .filter(
+        (r) =>
+          r.eventId === eventId &&
+          r.chaletId === item.chaletId &&
+          r.status === "SETTLED",
+      )
+      .reduce((s, r) => s + r.amountCents, 0);
+    const credit =
+      paid + (advances.get(item.chaletId) ?? 0) - settledSum - item.totalCents;
     if (credit > 0) {
       db.receivables.push({
         id: uid(),
@@ -455,6 +529,37 @@ function generateReceivables(db: Db, eventId: string, settlement: DbSettlement):
       });
     }
   }
+}
+
+function recalcSettlement(db: Db, eventId: string): void {
+  const settlement = computeSettlement(db, eventId);
+  db.settlements = db.settlements.filter((s) => s.eventId !== eventId);
+  db.settlements.push(settlement);
+  generateReceivables(db, eventId, settlement);
+}
+
+/** Rateio automático "a cada compra". */
+function autoRecalcOnPurchase(db: Db, eventId: string): void {
+  const event = db.events.find((e) => e.id === eventId);
+  if (event?.status !== "OPEN") return;
+  if ((event.settlementAutoMode ?? "MANUAL") !== "ON_PURCHASE") return;
+  recalcSettlement(db, eventId);
+}
+
+/**
+ * Rateio automático por intervalo: sem cron no protótipo, o recálculo é
+ * preguiçoso — dispara quando o rateio é lido e o intervalo venceu.
+ */
+function autoRecalcIfDue(db: Db, eventId: string): void {
+  const event = db.events.find((e) => e.id === eventId);
+  if (event?.status !== "OPEN") return;
+  if ((event.settlementAutoMode ?? "MANUAL") !== "INTERVAL") return;
+  const minutes = event.settlementAutoMinutes ?? 0;
+  if (minutes < 1) return;
+  const settlement = db.settlements.find((s) => s.eventId === eventId);
+  const last = settlement ? new Date(settlement.computedAt).getTime() : 0;
+  if (Date.now() - last < minutes * 60_000) return;
+  recalcSettlement(db, eventId);
 }
 
 const receivableResponse = (db: Db, r: DbReceivable) => {
@@ -506,6 +611,9 @@ const userResponse = (u: DbUser) => ({
   email: u.email,
   role: u.role,
   active: u.active,
+  phone: u.phone ?? null,
+  hasAvatar: Boolean(u.avatarDataUrl),
+  mustChangePassword: u.mustChangePassword ?? false,
   createdAt: u.createdAt,
 });
 
@@ -528,6 +636,60 @@ function requireEventOpen(db: Db, eventId: string): DbEvent {
   return event;
 }
 
+function logAudit(
+  db: Db,
+  userId: string | null,
+  action: string,
+  entity: string,
+  entityId: string | null = null,
+  metadata: Record<string, unknown> | null = null,
+): void {
+  db.audit.push({
+    id: uid(),
+    userId,
+    action,
+    entity,
+    entityId,
+    metadata,
+    ip: null,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+/** Mesmo mapa semântico do backend real (interceptor de auditoria). */
+const AUDIT_ROUTES: Array<{
+  method: string;
+  pattern: RegExp;
+  action: string;
+  entity: string;
+}> = [
+  { method: "POST", pattern: /^\/users$/, action: "USER_CREATED", entity: "User" },
+  { method: "PATCH", pattern: /^\/users\/([^/]+)$/, action: "USER_UPDATED", entity: "User" },
+  { method: "DELETE", pattern: /^\/users\/([^/]+)$/, action: "USER_DELETED", entity: "User" },
+  { method: "POST", pattern: /^\/chalets$/, action: "CHALET_CREATED", entity: "Chalet" },
+  { method: "PATCH", pattern: /^\/chalets\/([^/]+)$/, action: "CHALET_UPDATED", entity: "Chalet" },
+  { method: "DELETE", pattern: /^\/chalets\/([^/]+)$/, action: "CHALET_DELETED", entity: "Chalet" },
+  { method: "POST", pattern: /^\/events$/, action: "EVENT_CREATED", entity: "Event" },
+  { method: "PATCH", pattern: /^\/events\/([^/]+)$/, action: "EVENT_UPDATED", entity: "Event" },
+  { method: "POST", pattern: /^\/events\/([^/]+)\/cancel$/, action: "EVENT_CANCELLED", entity: "Event" },
+  { method: "POST", pattern: /^\/events\/([^/]+)\/close$/, action: "EVENT_CLOSED", entity: "Event" },
+  { method: "POST", pattern: /^\/events\/([^/]+)\/reopen$/, action: "EVENT_REOPENED", entity: "Event" },
+  { method: "DELETE", pattern: /^\/events\/([^/]+)$/, action: "EVENT_DELETED", entity: "Event" },
+  { method: "POST", pattern: /^\/reservations$/, action: "RESERVATION_CREATED", entity: "Reservation" },
+  { method: "PATCH", pattern: /^\/reservations\/([^/]+)$/, action: "RESERVATION_UPDATED", entity: "Reservation" },
+  { method: "POST", pattern: /^\/reservations\/([^/]+)\/cancel$/, action: "RESERVATION_CANCELLED", entity: "Reservation" },
+  { method: "DELETE", pattern: /^\/reservations\/([^/]+)$/, action: "RESERVATION_DELETED", entity: "Reservation" },
+  { method: "POST", pattern: /^\/purchases$/, action: "PURCHASE_CREATED", entity: "Purchase" },
+  { method: "PATCH", pattern: /^\/purchases\/([^/]+)$/, action: "PURCHASE_UPDATED", entity: "Purchase" },
+  { method: "DELETE", pattern: /^\/purchases\/([^/]+)$/, action: "PURCHASE_DELETED", entity: "Purchase" },
+  { method: "POST", pattern: /^\/events\/([^/]+)\/settlement\/calculate$/, action: "SETTLEMENT_CALCULATED", entity: "Settlement" },
+  { method: "PUT", pattern: /^\/events\/([^/]+)\/settlement\/auto$/, action: "SETTLEMENT_AUTO_CONFIGURED", entity: "Settlement" },
+  { method: "POST", pattern: /^\/payments$/, action: "PAYMENT_REGISTERED", entity: "Payment" },
+  { method: "PATCH", pattern: /^\/receivables\/([^/]+)\/settle$/, action: "RECEIVABLE_SETTLED", entity: "Receivable" },
+];
+
+const MUTATING = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+
 export function demoApi(pathWithQuery: string, method: string, body?: unknown): unknown {
   const [path, queryString = ""] = pathWithQuery.split("?");
   const req: DemoRequest = {
@@ -538,6 +700,15 @@ export function demoApi(pathWithQuery: string, method: string, body?: unknown): 
   };
   const db = loadDb();
   const result = route(db, req);
+  if (MUTATING.has(method)) {
+    const match = AUDIT_ROUTES.find(
+      (r) => r.method === method && r.pattern.test(path),
+    );
+    if (match) {
+      const entityId = match.pattern.exec(path)?.[1] ?? null;
+      logAudit(db, demoSession()?.id ?? null, match.action, match.entity, entityId);
+    }
+  }
   saveDb(db);
   return result;
 }
@@ -708,7 +879,7 @@ function route(db: Db, req: DemoRequest): unknown {
   if (seg[0] === "events" && seg[2] === "reopen" && method === "POST") {
     const event = db.events.find((e) => e.id === seg[1]);
     if (!event) throw new DemoApiError(404, "Evento não encontrado.");
-    db.receivables = db.receivables.filter((r) => r.eventId !== event.id);
+    // Créditos permanecem: são recalculados a cada novo rateio.
     event.status = "OPEN";
     return event;
   }
@@ -716,14 +887,43 @@ function route(db: Db, req: DemoRequest): unknown {
   // ── Rateio ──
   if (seg[0] === "events" && seg[2] === "settlement") {
     const eventId = seg[1];
+    if (seg[3] === "auto" && method === "GET") {
+      const event = db.events.find((e) => e.id === eventId);
+      if (!event) throw new DemoApiError(404, "Evento não encontrado.");
+      return {
+        mode: event.settlementAutoMode ?? "MANUAL",
+        intervalMinutes: event.settlementAutoMinutes ?? null,
+      };
+    }
+    if (seg[3] === "auto" && method === "PUT") {
+      if (!isAdmin) throw new DemoApiError(403, "Apenas administradores.");
+      const event = db.events.find((e) => e.id === eventId);
+      if (!event) throw new DemoApiError(404, "Evento não encontrado.");
+      const mode = body.mode as SettlementAutoMode;
+      const intervalMinutes = body.intervalMinutes ? Number(body.intervalMinutes) : null;
+      if (mode === "INTERVAL" && (!intervalMinutes || intervalMinutes < 1)) {
+        throw new DemoApiError(
+          422,
+          "Informe o intervalo em minutos para o rateio automático por tempo.",
+        );
+      }
+      event.settlementAutoMode = mode;
+      event.settlementAutoMinutes = mode === "INTERVAL" ? intervalMinutes : null;
+      return {
+        mode: event.settlementAutoMode,
+        intervalMinutes: event.settlementAutoMinutes,
+      };
+    }
     if (seg[3] === "calculate" && method === "POST") {
       requireEventOpen(db, eventId);
       const settlement = computeSettlement(db, eventId);
       db.settlements = db.settlements.filter((s) => s.eventId !== eventId);
       db.settlements.push(settlement);
+      generateReceivables(db, eventId, settlement);
       return settlementView(db, settlement);
     }
     if (method === "GET") {
+      autoRecalcIfDue(db, eventId);
       const settlement = db.settlements.find((s) => s.eventId === eventId);
       if (!settlement) {
         throw new DemoApiError(404, "Rateio ainda não calculado para este evento.");
@@ -745,10 +945,13 @@ function route(db: Db, req: DemoRequest): unknown {
       );
       const paidCents = payments.reduce((s, p) => s + p.amountCents, 0);
       const advanceCents = advances.get(item.chaletId) ?? 0;
+      const chalet = db.chalets.find((c) => c.id === item.chaletId);
+      const chaletOwner = db.users.find((u) => u.id === chalet?.ownerId);
       return {
         chaletId: item.chaletId,
         chaletNumber: item.chaletNumber,
         chaletName: item.chaletName,
+        ownerName: chaletOwner?.name ?? null,
         owedCents: item.totalCents,
         paidCents,
         advanceCents,
@@ -859,13 +1062,12 @@ function route(db: Db, req: DemoRequest): unknown {
     return reservationResponse(db, reservation);
   }
   if (seg[0] === "reservations" && seg.length === 2 && method === "PATCH") {
+    if (!isAdmin) {
+      throw new DemoApiError(403, "Somente administradores podem alterar reservas.");
+    }
     const reservation = db.reservations.find((r) => r.id === seg[1]);
     if (!reservation) throw new DemoApiError(404, "Reserva não encontrada.");
     const event = requireEventOpen(db, reservation.eventId);
-    const chalet = db.chalets.find((c) => c.id === reservation.chaletId);
-    if (!isAdmin && reservation.responsibleId !== user.id && chalet?.ownerId !== user.id) {
-      throw new DemoApiError(403, "Você só pode alterar reservas do seu próprio chalé.");
-    }
     const checkIn = body.checkIn ? String(body.checkIn).slice(0, 10) : reservation.checkIn;
     const checkOut = body.checkOut ? String(body.checkOut).slice(0, 10) : reservation.checkOut;
     if (checkIn < event.startDate || checkOut > event.endDate || checkOut < checkIn) {
@@ -881,12 +1083,24 @@ function route(db: Db, req: DemoRequest): unknown {
     if (body.notes !== undefined) reservation.notes = (body.notes as string) || null;
     return reservationResponse(db, reservation);
   }
-  if (seg[0] === "reservations" && seg.length === 2 && method === "DELETE") {
+  if (seg[0] === "reservations" && seg[2] === "cancel" && method === "POST") {
+    if (!isAdmin) {
+      throw new DemoApiError(403, "Somente administradores podem alterar reservas.");
+    }
     const reservation = db.reservations.find((r) => r.id === seg[1]);
     if (!reservation) throw new DemoApiError(404, "Reserva não encontrada.");
     requireEventOpen(db, reservation.eventId);
     reservation.status = "CANCELLED";
     return reservationResponse(db, reservation);
+  }
+  if (seg[0] === "reservations" && seg.length === 2 && method === "DELETE") {
+    if (!isAdmin) {
+      throw new DemoApiError(403, "Apenas administradores podem excluir reservas.");
+    }
+    const reservation = db.reservations.find((r) => r.id === seg[1]);
+    if (!reservation) throw new DemoApiError(404, "Reserva não encontrada.");
+    db.reservations = db.reservations.filter((r) => r.id !== reservation.id);
+    return undefined;
   }
 
   // ── Compras ──
@@ -923,6 +1137,7 @@ function route(db: Db, req: DemoRequest): unknown {
       receiptDataUrl: null,
     };
     db.purchases.push(purchase);
+    autoRecalcOnPurchase(db, purchase.eventId);
     return purchaseResponse(db, purchase);
   }
   if (seg[0] === "purchases" && seg.length === 2 && method === "DELETE") {
@@ -930,6 +1145,7 @@ function route(db: Db, req: DemoRequest): unknown {
     if (!purchase) throw new DemoApiError(404, "Compra não encontrada.");
     requireEventOpen(db, purchase.eventId);
     db.purchases = db.purchases.filter((p) => p.id !== seg[1]);
+    autoRecalcOnPurchase(db, purchase.eventId);
     return undefined;
   }
 
@@ -937,9 +1153,63 @@ function route(db: Db, req: DemoRequest): unknown {
   if (path === "/users" && method === "GET") {
     return db.users.map(userResponse);
   }
+  if (path === "/users/me" && method === "GET") {
+    const me = db.users.find((u) => u.id === user.id);
+    if (!me) throw new DemoApiError(404, "Usuário não encontrado.");
+    return userResponse(me);
+  }
+  if (path === "/users/me" && method === "PATCH") {
+    const me = db.users.find((u) => u.id === user.id);
+    if (!me) throw new DemoApiError(404, "Usuário não encontrado.");
+    if (
+      body.email &&
+      db.users.some((u) => u.id !== me.id && u.email === body.email)
+    ) {
+      throw new DemoApiError(409, "Já existe um usuário com este e-mail.");
+    }
+    if (
+      body.name &&
+      db.users.some(
+        (u) =>
+          u.id !== me.id &&
+          u.name.toLowerCase() === String(body.name).toLowerCase(),
+      )
+    ) {
+      throw new DemoApiError(409, "Já existe um usuário com este nome.");
+    }
+    if (body.name) me.name = String(body.name);
+    if (body.email) me.email = String(body.email);
+    if (body.phone !== undefined)
+      me.phone = body.phone ? String(body.phone) : null;
+    syncSession(db, me.id);
+    return userResponse(me);
+  }
+  if (path === "/users/me/password" && method === "POST") {
+    const me = db.users.find((u) => u.id === user.id);
+    if (!me) throw new DemoApiError(404, "Usuário não encontrado.");
+    if (me.password !== String(body.currentPassword)) {
+      throw new DemoApiError(401, "Senha atual incorreta.");
+    }
+    me.password = String(body.newPassword);
+    me.mustChangePassword = false;
+    syncSession(db, me.id);
+    return userResponse(me);
+  }
+  if (seg[0] === "users" && seg.length === 2 && method === "GET") {
+    const target = db.users.find((u) => u.id === seg[1]);
+    if (!target) throw new DemoApiError(404, "Usuário não encontrado.");
+    return userResponse(target);
+  }
   if (path === "/users" && method === "POST") {
     if (db.users.some((u) => u.email === body.email)) {
       throw new DemoApiError(409, "Já existe um usuário com este e-mail.");
+    }
+    if (
+      db.users.some(
+        (u) => u.name.toLowerCase() === String(body.name).toLowerCase(),
+      )
+    ) {
+      throw new DemoApiError(409, "Já existe um usuário com este nome.");
     }
     const created: DbUser = {
       id: `u-${uid()}`,
@@ -948,6 +1218,10 @@ function route(db: Db, req: DemoRequest): unknown {
       password: String(body.password),
       role: body.role as Role,
       active: true,
+      phone: body.phone ? String(body.phone) : null,
+      avatarDataUrl: null,
+      // Criado pelo admin: deve trocar a senha no primeiro acesso.
+      mustChangePassword: true,
       createdAt: new Date().toISOString(),
     };
     db.users.push(created);
@@ -957,8 +1231,57 @@ function route(db: Db, req: DemoRequest): unknown {
     const target = db.users.find((u) => u.id === seg[1]);
     if (!target) throw new DemoApiError(404, "Usuário não encontrado.");
     if (body.active !== undefined) target.active = Boolean(body.active);
-    if (body.name) target.name = String(body.name);
+    if (body.name) {
+      const nameTaken = db.users.some(
+        (u) =>
+          u.id !== target.id &&
+          u.name.toLowerCase() === String(body.name).toLowerCase(),
+      );
+      if (nameTaken) {
+        throw new DemoApiError(409, "Já existe um usuário com este nome.");
+      }
+      target.name = String(body.name);
+    }
+    if (body.phone !== undefined)
+      target.phone = body.phone ? String(body.phone) : null;
+    syncSession(db, target.id);
     return userResponse(target);
+  }
+
+  // ── Auditoria ──
+  if (path === "/audit" && method === "GET") {
+    if (!isAdmin) throw new DemoApiError(403, "Apenas administradores.");
+    let list = db.audit
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const userId = query.get("userId");
+    if (userId) list = list.filter((l) => l.userId === userId);
+    const entity = query.get("entity");
+    if (entity) list = list.filter((l) => l.entity === entity);
+    const action = query.get("action");
+    if (action) list = list.filter((l) => l.action === action);
+    const from = query.get("from");
+    if (from) list = list.filter((l) => l.createdAt >= from);
+    const to = query.get("to");
+    if (to) list = list.filter((l) => l.createdAt <= to);
+    const page = Number(query.get("page") ?? 1);
+    const perPage = Number(query.get("perPage") ?? 25);
+    const data = list.slice((page - 1) * perPage, page * perPage).map((l) => {
+      const logUser = l.userId ? db.users.find((u) => u.id === l.userId) : null;
+      return {
+        id: l.id,
+        action: l.action,
+        entity: l.entity,
+        entityId: l.entityId,
+        metadata: l.metadata,
+        ip: l.ip,
+        createdAt: l.createdAt,
+        user: logUser
+          ? { id: logUser.id, name: logUser.name, email: logUser.email }
+          : null,
+      };
+    });
+    return { data, total: list.length, page, perPage };
   }
 
   // ── Relatório ──
@@ -999,9 +1322,12 @@ function route(db: Db, req: DemoRequest): unknown {
               .filter((p) => p.eventId === event.id && p.chaletId === item.chaletId)
               .reduce((s, p) => s + p.amountCents, 0);
             const advance = advancesByChalet(db, event.id).get(item.chaletId) ?? 0;
+            const chalet = db.chalets.find((c) => c.id === item.chaletId);
+            const chaletOwner = db.users.find((u) => u.id === chalet?.ownerId);
             return {
               chaletNumber: item.chaletNumber,
               chaletName: item.chaletName,
+              ownerName: chaletOwner?.name ?? null,
               commonCents: item.commonCents,
               alcoholCents: item.alcoholCents,
               totalCents: item.totalCents,
@@ -1090,6 +1416,13 @@ export async function demoAttachReceipt(purchaseId: string, file: File): Promise
     reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
     reader.readAsDataURL(file);
   });
+  logAudit(
+    db,
+    demoSession()?.id ?? null,
+    "PURCHASE_RECEIPT_ATTACHED",
+    "Purchase",
+    purchaseId,
+  );
   saveDb(db);
   return purchaseResponse(db, purchase);
 }
@@ -1097,4 +1430,28 @@ export async function demoAttachReceipt(purchaseId: string, file: File): Promise
 export function demoReceiptUrl(purchaseId: string): string | null {
   const db = loadDb();
   return db.purchases.find((p) => p.id === purchaseId)?.receiptDataUrl ?? null;
+}
+
+// ── Foto de perfil ──────────────────────────────────────────────────
+
+export async function demoSetAvatar(file: File): Promise<unknown> {
+  const session = demoSession();
+  if (!session) throw new DemoApiError(401, "Sessão expirada. Faça login novamente.");
+  const db = loadDb();
+  const me = db.users.find((u) => u.id === session.id);
+  if (!me) throw new DemoApiError(404, "Usuário não encontrado.");
+  me.avatarDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
+  syncSession(db, me.id);
+  saveDb(db);
+  return userResponse(me);
+}
+
+export function demoAvatarUrl(userId: string): string | null {
+  const db = loadDb();
+  return db.users.find((u) => u.id === userId)?.avatarDataUrl ?? null;
 }

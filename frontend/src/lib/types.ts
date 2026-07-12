@@ -43,6 +43,10 @@ export interface SessionUser {
   name: string;
   email: string;
   role: Role;
+  phone: string | null;
+  hasAvatar: boolean;
+  /** Usuário criado pelo admin ainda não trocou a senha inicial. */
+  mustChangePassword: boolean;
 }
 
 export interface UserItem extends SessionUser {
@@ -103,6 +107,24 @@ export interface Purchase {
   hasReceipt: boolean;
 }
 
+export interface AuditLogItem {
+  id: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  metadata: Record<string, unknown> | null;
+  ip: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+}
+
+export type SettlementAutoMode = "MANUAL" | "ON_PURCHASE" | "INTERVAL";
+
+export interface SettlementAutoConfig {
+  mode: SettlementAutoMode;
+  intervalMinutes: number | null;
+}
+
 export interface Settlement {
   eventId: string;
   strategy: string;
@@ -124,6 +146,7 @@ export interface ChaletPaymentSummary {
   chaletId: string;
   chaletNumber: number;
   chaletName: string;
+  ownerName: string | null;
   owedCents: number;
   paidCents: number;
   /** Compras/adiantamentos lançados vinculados ao chalé. */
@@ -166,6 +189,7 @@ export interface EventReport {
   settlement: Array<{
     chaletNumber: number;
     chaletName: string;
+    ownerName: string | null;
     commonCents: number;
     alcoholCents: number;
     totalCents: number;
