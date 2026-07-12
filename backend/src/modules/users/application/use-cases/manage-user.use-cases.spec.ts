@@ -25,6 +25,7 @@ const user = {
 const makeRepo = (overrides: Partial<UserRepository> = {}): UserRepository => ({
   findById: jest.fn().mockResolvedValue(user),
   findByEmail: jest.fn().mockResolvedValue(null),
+  findByName: jest.fn().mockResolvedValue(null),
   create: jest
     .fn()
     .mockImplementation((data) => Promise.resolve({ ...user, ...data })),
@@ -68,6 +69,19 @@ describe('CreateUserUseCase', () => {
       }),
     ).rejects.toThrow(ConflictError);
   });
+
+  it('bloqueia nome duplicado', async () => {
+    const repo = makeRepo({ findByName: jest.fn().mockResolvedValue(user) });
+    const useCase = new CreateUserUseCase(repo);
+    await expect(
+      useCase.execute({
+        name: user.name,
+        email: 'novo@test.com',
+        password: 'Senha@123',
+        role: 'OWNER',
+      }),
+    ).rejects.toThrow(ConflictError);
+  });
 });
 
 describe('UpdateUserUseCase', () => {
@@ -93,6 +107,16 @@ describe('UpdateUserUseCase', () => {
     const useCase = new UpdateUserUseCase(repo);
     await expect(
       useCase.execute({ id: 'u1', email: 'em-uso@test.com' }),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('bloqueia troca para nome já usado', async () => {
+    const repo = makeRepo({
+      findByName: jest.fn().mockResolvedValue({ ...user, id: 'outro' }),
+    });
+    const useCase = new UpdateUserUseCase(repo);
+    await expect(
+      useCase.execute({ id: 'u1', name: 'Nome Em Uso' }),
     ).rejects.toThrow(ConflictError);
   });
 });

@@ -24,6 +24,12 @@ enum EventStatus {
   CANCELLED
 }
 
+enum SettlementAutoMode {
+  MANUAL
+  ON_PURCHASE
+  INTERVAL
+}
+
 enum ReservationStatus {
   ACTIVE
   CANCELLED
@@ -46,14 +52,17 @@ enum PurchaseCategory {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  name         String
-  email        String    @unique
-  passwordHash String    @map("password_hash")
-  role         Role      @default(OWNER)
-  active       Boolean   @default(true)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  email              String   @unique
+  passwordHash       String   @map("password_hash")
+  role               Role     @default(OWNER)
+  active             Boolean  @default(true)
+  phone              String?
+  avatarPath         String?  @map("avatar_path")
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   chalets       Chalet[]
   reservations  Reservation[]
@@ -107,8 +116,13 @@ model Event {
   status     EventStatus @default(OPEN)
   closedAt   DateTime?   @map("closed_at")
   closedById String?     @map("closed_by_id")
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  // Rateio automático: recalcula a cada compra ou em intervalo fixo (minutos).
+  settlementAutoMode    SettlementAutoMode @default(MANUAL) @map("settlement_auto_mode")
+  settlementAutoMinutes Int?               @map("settlement_auto_minutes")
+  settlementAutoSetById String?            @map("settlement_auto_set_by_id")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
 
   closedBy     User?         @relation("EventClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   reservations Reservation[]

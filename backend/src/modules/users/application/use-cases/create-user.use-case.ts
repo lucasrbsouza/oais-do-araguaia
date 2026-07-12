@@ -10,6 +10,7 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role: Role;
+  phone?: string;
 }
 
 @Injectable()
@@ -22,6 +23,11 @@ export class CreateUserUseCase {
       throw new ConflictError('Já existe um usuário com este e-mail.');
     }
 
+    const nameTaken = await this.userRepository.findByName(input.name);
+    if (nameTaken) {
+      throw new ConflictError('Já existe um usuário com este nome.');
+    }
+
     const passwordHash = await argon2.hash(input.password, {
       type: argon2.argon2id,
     });
@@ -30,6 +36,9 @@ export class CreateUserUseCase {
       email: input.email,
       passwordHash,
       role: input.role,
+      phone: input.phone ?? null,
+      // Usuário criado pelo admin deve trocar a senha no primeiro acesso.
+      mustChangePassword: true,
     });
     return toUserResponse(user);
   }

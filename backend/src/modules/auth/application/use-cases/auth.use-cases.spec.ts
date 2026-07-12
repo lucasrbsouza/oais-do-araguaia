@@ -1,5 +1,6 @@
 import { User } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { AuditService } from '../../../audit/audit.service';
 import { UnauthorizedError } from '../../../../shared/domain/domain-error';
 import { UserRepository } from '../../../users/domain/user.repository';
 import { RefreshTokenRepository } from '../../domain/refresh-token.repository';
@@ -15,6 +16,9 @@ const makeUser = async (overrides: Partial<User> = {}): Promise<User> => ({
   passwordHash: await argon2.hash('Senha@123', { type: argon2.argon2id }),
   role: 'ADMIN',
   active: true,
+  phone: null,
+  avatarPath: null,
+  mustChangePassword: false,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,
@@ -39,6 +43,10 @@ const makeRefreshRepo = (
   ...overrides,
 });
 
+const audit = {
+  log: jest.fn().mockResolvedValue(undefined),
+} as unknown as AuditService;
+
 describe('LoginUseCase', () => {
   it('autentica com credenciais corretas', async () => {
     const user = await makeUser();
@@ -46,7 +54,7 @@ describe('LoginUseCase', () => {
       findByEmail: jest.fn().mockResolvedValue(user),
     } as unknown as UserRepository;
     const refreshRepo = makeRefreshRepo();
-    const useCase = new LoginUseCase(userRepo, refreshRepo, tokenService);
+    const useCase = new LoginUseCase(userRepo, refreshRepo, tokenService, audit);
 
     const result = await useCase.execute({
       email: user.email,
@@ -64,7 +72,7 @@ describe('LoginUseCase', () => {
     const userRepo = {
       findByEmail: jest.fn().mockResolvedValue(user),
     } as unknown as UserRepository;
-    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService);
+    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService, audit);
     await expect(
       useCase.execute({ email: user.email, password: 'errada-123' }),
     ).rejects.toThrow(UnauthorizedError);
@@ -75,7 +83,7 @@ describe('LoginUseCase', () => {
     const userRepo = {
       findByEmail: jest.fn().mockResolvedValue(user),
     } as unknown as UserRepository;
-    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService);
+    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService, audit);
     await expect(
       useCase.execute({ email: user.email, password: 'Senha@123' }),
     ).rejects.toThrow(UnauthorizedError);
@@ -85,7 +93,7 @@ describe('LoginUseCase', () => {
     const userRepo = {
       findByEmail: jest.fn().mockResolvedValue(null),
     } as unknown as UserRepository;
-    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService);
+    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService, audit);
     await expect(
       useCase.execute({ email: 'x@x.com', password: 'Senha@123' }),
     ).rejects.toThrow(UnauthorizedError);
@@ -185,14 +193,14 @@ describe('LogoutUseCase', () => {
     const refreshRepo = makeRefreshRepo({
       findByHash: jest.fn().mockResolvedValue(stored),
     });
-    const useCase = new LogoutUseCase(refreshRepo, tokenService);
+    const useCase = new LogoutUseCase(refreshRepo, tokenService, audit);
     await useCase.execute('refresh-raw');
     expect(refreshRepo.revoke).toHaveBeenCalledWith('rt1');
   });
 
   it('ignora logout sem cookie', async () => {
     const refreshRepo = makeRefreshRepo();
-    const useCase = new LogoutUseCase(refreshRepo, tokenService);
+    const useCase = new LogoutUseCase(refreshRepo, tokenService, audit);
     await useCase.execute(undefined);
     expect(refreshRepo.findByHash).not.toHaveBeenCalled();
   });

@@ -6,6 +6,9 @@ export interface UserResponse {
   email: string;
   role: string;
   active: boolean;
+  phone: string | null;
+  hasAvatar: boolean;
+  mustChangePassword: boolean;
   createdAt: Date;
 }
 
@@ -15,5 +18,8 @@ export const toUserResponse = (user: User): UserResponse => ({
   email: user.email,
   role: user.role,
   active: user.active,
+  phone: user.phone,
+  hasAvatar: user.avatarPath !== null,
+  mustChangePassword: user.mustChangePassword,
   createdAt: user.createdAt,
 });

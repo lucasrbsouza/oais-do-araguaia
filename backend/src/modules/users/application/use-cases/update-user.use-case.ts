@@ -15,6 +15,7 @@ export interface UpdateUserInput {
   role?: Role;
   active?: boolean;
   password?: string;
+  phone?: string | null;
 }
 
 @Injectable()
@@ -34,6 +35,13 @@ export class UpdateUserUseCase {
       }
     }
 
+    if (input.name && input.name !== user.name) {
+      const nameTaken = await this.userRepository.findByName(input.name);
+      if (nameTaken && nameTaken.id !== user.id) {
+        throw new ConflictError('Já existe um usuário com este nome.');
+      }
+    }
+
     const passwordHash = input.password
       ? await argon2.hash(input.password, { type: argon2.argon2id })
       : undefined;
@@ -44,6 +52,7 @@ export class UpdateUserUseCase {
       role: input.role,
       active: input.active,
       passwordHash,
+      phone: input.phone,
     });
     return toUserResponse(updated);
   }
