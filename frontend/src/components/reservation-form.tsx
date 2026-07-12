@@ -70,6 +70,8 @@ export function ReservationForm({ defaultEventId, reservation, onDone }: Reserva
         }
       : {
           eventId: defaultEventId ?? "",
+          checkIn: new Date().toISOString().slice(0, 10),
+          checkOut: new Date().toISOString().slice(0, 10),
           adults: 1,
           children: 0,
           alcoholConsumers: 0,

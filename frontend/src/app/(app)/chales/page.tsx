@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { Chalet, ChaletStatus, UserItem } from "@/lib/types";
 import { CHALET_STATUS_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -165,15 +166,32 @@ export default function ChaletsPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredChalets.map((chalet) => (
-            <tr key={chalet.id} className="hover:bg-surface-soft/60">
-              <Td className="font-semibold text-ink">{chalet.number}</Td>
-              <Td>{chalet.name}</Td>
-              <Td>
-                {chalet.owner?.name ?? (
-                  <span className="text-muted-soft">Sem proprietário</span>
-                )}
-              </Td>
+            {filteredChalets.map((chalet) => {
+              const isMine = chalet.owner?.id === user?.id;
+              return (
+                <tr
+                  key={chalet.id}
+                  className={cn(
+                    "hover:bg-surface-soft/60",
+                    isMine && "bg-primary/[0.04] border-l-2 border-l-primary"
+                  )}
+                >
+                  <Td className="font-semibold text-ink">{chalet.number}</Td>
+                  <Td>{chalet.name}</Td>
+                  <Td>
+                    {chalet.owner ? (
+                      <span className="flex items-center gap-1.5">
+                        {chalet.owner.name}
+                        {isMine && (
+                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                            Você
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-muted-soft">Sem proprietário</span>
+                    )}
+                  </Td>
               <Td>
                 <ChaletStatusBadge status={chalet.status} />
               </Td>
@@ -211,8 +229,9 @@ export default function ChaletsPage() {
                   )}
                 </div>
               </Td>
-            </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </Table>
       )}

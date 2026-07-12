@@ -72,7 +72,13 @@ export default function EventsPage() {
     queryFn: () => api<Paginated<EventItem>>(`/events?page=${page}&perPage=20`),
   });
 
-  const form = useForm<FormData>({ resolver: zodResolver(schema) });
+  const form = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: new Date().toISOString().slice(0, 10),
+    },
+  });
   const editForm = useForm<FormData>({ resolver: zodResolver(schema) });
 
   const invalidate = (): void => {
@@ -84,7 +90,11 @@ export default function EventsPage() {
     onSuccess: () => {
       invalidate();
       setOpen(false);
-      form.reset();
+      form.reset({
+        name: "",
+        startDate: new Date().toISOString().slice(0, 10),
+        endDate: new Date().toISOString().slice(0, 10),
+      });
     },
     onError: (err: Error) => setFormError(err.message),
   });
@@ -142,7 +152,20 @@ export default function EventsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-ink">Eventos</h1>
-        {isAdmin && <Button onClick={() => setOpen(true)}>Novo evento</Button>}
+        {isAdmin && (
+          <Button
+            onClick={() => {
+              form.reset({
+                name: "",
+                startDate: new Date().toISOString().slice(0, 10),
+                endDate: new Date().toISOString().slice(0, 10),
+              });
+              setOpen(true);
+            }}
+          >
+            Novo evento
+          </Button>
+        )}
       </div>
 
       {listError && <ErrorState message={listError} />}

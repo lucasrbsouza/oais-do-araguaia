@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import type { Reservation } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +23,8 @@ interface ReservationsPanelProps {
 
 /**
  * Painel único de reservas usado tanto na página Reservas quanto na aba
- * do evento: mesmas colunas, mesmas ações (criar, editar, cancelar) e
- * mesmas regras de permissão nas duas telas.
+ * do evento: mesmas colunas, mesmas ações e mesmas regras nas duas telas.
+ * Editar, cancelar e excluir são exclusivos do administrador.
  */
 export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPanelProps) {
   const { user } = useSession();
@@ -33,6 +34,7 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Reservation | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Reservation | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [filterMyReservations, setFilterMyReservations] = useState(false);
 
@@ -51,7 +53,8 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
   }, [data, filterMyReservations, user?.id]);
 
   const cancelMutation = useMutation({
-    mutationFn: (id: string) => api<Reservation>(`/reservations/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      api<Reservation>(`/reservations/${id}/cancel`, { method: "POST" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reservations"] });
       void queryClient.invalidateQueries({ queryKey: ["events"] });
@@ -63,8 +66,18 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
     },
   });
 
-  const canManage = (r: Reservation): boolean =>
-    isAdmin || r.responsible.id === user?.id || r.chalet.ownerId === user?.id;
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api<void>(`/reservations/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reservations"] });
+      void queryClient.invalidateQueries({ queryKey: ["events"] });
+      setDeleteTarget(null);
+    },
+    onError: (err: Error) => {
+      setDeleteTarget(null);
+      setActionError(err.message);
+    },
+  });
 
   if (isLoading) return <TableSkeleton rows={6} />;
   if (error) return <ErrorState message={(error as Error).message} />;
@@ -130,52 +143,85 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
             </tr>
           </thead>
           <tbody>
-            {filteredReservations.map((r) => (
-              <tr key={r.id} className="hover:bg-surface-soft/60">
-                <Td className="font-medium text-ink">
-                  {r.chalet.number} — {r.chalet.name}
-                </Td>
-                <Td>{r.responsible.name}</Td>
-                <Td>
-                  {formatDate(r.checkIn)} – {formatDate(r.checkOut)}
-                </Td>
-                <Td>{r.adults}</Td>
-                <Td>{r.children}</Td>
-                <Td>{r.alcoholConsumers}</Td>
-                <Td>
-                  <Badge tone={r.status === "ACTIVE" ? "success" : "neutral"}>
-                    {r.status === "ACTIVE" ? "Ativa" : "Cancelada"}
-                  </Badge>
-                </Td>
-                <Td>
-                  {r.status === "ACTIVE" && eventOpen && canManage(r) && (
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => {
-                          setActionError(null);
-                          setEditTarget(r);
-                        }}
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        className="text-error"
-                        onClick={() => {
-                          setActionError(null);
-                          setCancelTarget(r);
-                        }}
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
+            {filteredReservations.map((r) => {
+              const isMyReservation = r.responsible.id === user?.id || r.chalet.ownerId === user?.id;
+              return (
+                <tr
+                  key={r.id}
+                  className={cn(
+                    "hover:bg-surface-soft/60",
+                    isMyReservation && "bg-primary/[0.04] border-l-2 border-l-primary"
                   )}
-                </Td>
-              </tr>
-            ))}
+                >
+                  <Td className="font-medium text-ink">
+                    {r.chalet.number} — {r.chalet.name}
+                  </Td>
+                  <Td>
+                    <span className="flex items-center gap-1.5">
+                      {r.responsible.name}
+                      {r.responsible.id === user?.id && (
+                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          Você
+                        </span>
+                      )}
+                    </span>
+                  </Td>
+                  <Td>
+                    {formatDate(r.checkIn)} – {formatDate(r.checkOut)}
+                  </Td>
+                  <Td>{r.adults}</Td>
+                  <Td>{r.children}</Td>
+                  <Td>{r.alcoholConsumers}</Td>
+                  <Td>
+                    <Badge tone={r.status === "ACTIVE" ? "success" : "neutral"}>
+                      {r.status === "ACTIVE" ? "Ativa" : "Cancelada"}
+                    </Badge>
+                  </Td>
+                  <Td>
+                    <div className="flex gap-1">
+                      {r.status === "ACTIVE" && eventOpen && isAdmin && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => {
+                              setActionError(null);
+                              setEditTarget(r);
+                            }}
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-error"
+                            onClick={() => {
+                              setActionError(null);
+                              setCancelTarget(r);
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        </>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          className="text-error"
+                          onClick={() => {
+                            setActionError(null);
+                            setDeleteTarget(r);
+                          }}
+                        >
+                          Excluir
+                        </Button>
+                      )}
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
           </tbody>
         </Table>
       )}
@@ -207,6 +253,21 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
         confirmLabel="Cancelar reserva"
         destructive
         loading={cancelMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title="Excluir reserva"
+        description={
+          deleteTarget
+            ? `Excluir permanentemente a reserva do Chalé ${deleteTarget.chalet.number} (${formatDate(deleteTarget.checkIn)} – ${formatDate(deleteTarget.checkOut)})? Esta ação não pode ser desfeita.`
+            : ""
+        }
+        confirmLabel="Excluir reserva"
+        destructive
+        loading={deleteMutation.isPending}
       />
     </div>
   );

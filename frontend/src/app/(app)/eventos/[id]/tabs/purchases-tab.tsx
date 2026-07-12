@@ -7,6 +7,7 @@ import { useRef, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, getReceiptUrl } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { formatCents, formatDate, parseBRLToCents } from "@/lib/format";
 import type { Chalet, Purchase } from "@/lib/types";
 import { CATEGORY_LABELS, PURCHASE_CATEGORIES } from "@/lib/types";
@@ -153,7 +154,10 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { category: "GROCERY" },
+    defaultValues: {
+      category: "GROCERY",
+      date: new Date().toISOString().slice(0, 10),
+    },
   });
 
   const createMutation = useMutation({
@@ -172,7 +176,10 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
     onSuccess: () => {
       invalidate();
       setOpen(false);
-      form.reset({ category: "GROCERY" });
+      form.reset({
+        category: "GROCERY",
+        date: new Date().toISOString().slice(0, 10),
+      });
     },
     onError: (err: Error) => setFormError(err.message),
   });
@@ -223,7 +230,11 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
           <Button
             onClick={() => {
               setFormError(null);
-              form.reset({ category: "GROCERY", chaletId: myChalet?.id ?? "" });
+              form.reset({
+                category: "GROCERY",
+                chaletId: myChalet?.id ?? "",
+                date: new Date().toISOString().slice(0, 10),
+              });
               setOpen(true);
             }}
           >
@@ -386,14 +397,28 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
             </tr>
           </thead>
           <tbody>
-            {filteredPurchases.map((p) => (
-              <tr key={p.id}>
-                <Td>{formatDate(p.date)}</Td>
-                <Td className="font-medium text-ink">
-                  {p.description ?? <span className="text-muted-soft">—</span>}
-                </Td>
-                <Td>{CATEGORY_LABELS[p.category]}</Td>
-                <Td>{p.responsible.name}</Td>
+            {filteredPurchases.map((p) => {
+              const isMyPurchase = p.responsible.id === user?.id;
+              return (
+                <tr
+                  key={p.id}
+                  className={cn(isMyPurchase && "bg-primary/[0.04] border-l-2 border-l-primary")}
+                >
+                  <Td>{formatDate(p.date)}</Td>
+                  <Td className="font-medium text-ink">
+                    {p.description ?? <span className="text-muted-soft">—</span>}
+                  </Td>
+                  <Td>{CATEGORY_LABELS[p.category]}</Td>
+                  <Td>
+                    <span className="flex items-center gap-1.5">
+                      {p.responsible.name}
+                      {isMyPurchase && (
+                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          Você
+                        </span>
+                      )}
+                    </span>
+                  </Td>
                 <Td>
                   {p.chalet ? (
                     `Chalé ${p.chalet.number} — ${p.chalet.name}`
@@ -439,8 +464,9 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                     )}
                   </Td>
                 )}
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </Table>
       )}
