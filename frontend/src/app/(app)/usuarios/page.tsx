@@ -5,13 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import Link from "next/link";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { UserItem } from "@/lib/types";
 import { useSession } from "@/stores/session";
+import { UserAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
-import { Field, PasswordField, SelectField } from "@/components/ui/input";
+import { Field, PasswordField, PhoneField, SelectField } from "@/components/ui/input";
 import { Table, Td, Th } from "@/components/ui/table";
 import { ErrorState, TableSkeleton } from "@/components/ui/states";
 
@@ -20,6 +23,7 @@ const schema = z.object({
   email: z.string().email("E-mail inválido."),
   password: z.string().min(8, "Mínimo de 8 caracteres."),
   role: z.enum(["ADMIN", "OWNER"]),
+  phone: z.string().max(20, "Máximo 20 caracteres.").optional().or(z.literal("")),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -48,7 +52,7 @@ export default function UsersPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["users"] });
       setOpen(false);
-      form.reset({ role: "OWNER" });
+      form.reset({ role: "OWNER", phone: "" });
     },
     onError: (err: Error) => setFormError(err.message),
   });
@@ -88,16 +92,39 @@ export default function UsersPage() {
           <tr>
             <Th>Nome</Th>
             <Th>E-mail</Th>
+            <Th className="hidden lg:table-cell">Telefone</Th>
             <Th>Perfil</Th>
             <Th>Situação</Th>
             {isAdmin && <Th className="w-44">Ações</Th>}
           </tr>
         </thead>
         <tbody>
-          {users?.map((u) => (
-            <tr key={u.id} className="hover:bg-surface-soft/60">
-              <Td className="font-medium text-ink">{u.name}</Td>
+          {users?.map((u) => {
+            const isMe = u.id === sessionUser?.id;
+            return (
+            <tr
+              key={u.id}
+              className={cn(
+                "hover:bg-surface-soft/60",
+                isMe && "bg-primary/[0.04] border-l-2 border-l-primary",
+              )}
+            >
+              <Td>
+                <Link
+                  href={isMe ? "/perfil" : `/usuarios/${u.id}`}
+                  className="flex items-center gap-2.5 font-medium text-ink hover:text-primary transition-colors"
+                >
+                  <UserAvatar userId={u.id} name={u.name} hasAvatar={u.hasAvatar} className="size-7" />
+                  {u.name}
+                  {isMe && (
+                    <span className="ml-1 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                      Você
+                    </span>
+                  )}
+                </Link>
+              </Td>
               <Td>{u.email}</Td>
+              <Td className="hidden lg:table-cell text-muted">{u.phone || "—"}</Td>
               <Td>{u.role === "ADMIN" ? "Administrador" : "Proprietário"}</Td>
               <Td>
                 <Badge tone={u.active ? "success" : "neutral"}>
@@ -132,7 +159,8 @@ export default function UsersPage() {
                 </Td>
               )}
             </tr>
-          ))}
+          );
+          })}
         </tbody>
       </Table>
 
@@ -164,6 +192,11 @@ export default function UsersPage() {
               <option value="OWNER">Proprietário</option>
               <option value="ADMIN">Administrador</option>
             </SelectField>
+            <PhoneField
+              label="Telefone (opcional)"
+              error={form.formState.errors.phone?.message}
+              {...form.register("phone")}
+            />
             <div className="flex justify-end gap-3">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancelar
