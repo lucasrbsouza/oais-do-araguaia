@@ -22,6 +22,7 @@ const STORAGE_KEY = "oais-demo-db-v1";
 const SESSION_KEY = "oais-demo-session-v1";
 /** Pool de ids pré-gerados no export estático (generateStaticParams). */
 const MAX_EVENTS = 30;
+const MAX_USERS = 30;
 
 export class DemoApiError extends Error {
   constructor(
@@ -146,6 +147,9 @@ interface Db {
   receivables: DbReceivable[];
   audit: DbAudit[];
   eventSeq: number;
+  /** Ids de usuário são sequenciais (u1, u2...) porque o protótipo estático
+   *  precisa pré-gerar a rota /usuarios/[id] de cada um. */
+  userSeq?: number;
 }
 
 const uid = (): string => Math.random().toString(36).slice(2, 10);
@@ -252,6 +256,7 @@ function seed(): Db {
     receivables: [],
     audit: [],
     eventSeq: 1,
+    userSeq: 0,
   };
 }
 
@@ -276,6 +281,7 @@ function loadDb(): Db {
       // bancos salvos antes das contas a receber / auditoria
       db.receivables ??= [];
       db.audit ??= [];
+      db.userSeq ??= 0;
       return db;
     }
   } catch {
@@ -656,6 +662,134 @@ function logAudit(
   });
 }
 
+const chaletLabel = (chalet: DbChalet): string => `${chalet.number} — ${chalet.name}`;
+
+/**
+ * Mesmo resumo legível que o backend real grava na auditoria: sem ele a tela de
+ * detalhes só teria IDs. Em exclusões precisa rodar antes de o registro sumir.
+ */
+function describeEntity(
+  db: Db,
+  entity: string,
+  id: string | null,
+): Record<string, unknown> | undefined {
+  if (!id) return undefined;
+  const chaletOf = (chaletId: string | null | undefined): DbChalet | undefined =>
+    chaletId ? db.chalets.find((c) => c.id === chaletId) : undefined;
+  const eventName = (eventId: string): string | undefined =>
+    db.events.find((e) => e.id === eventId)?.name;
+  const userName = (userId: string): string | undefined =>
+    db.users.find((u) => u.id === userId)?.name;
+
+  switch (entity) {
+    case "User": {
+      const user = db.users.find((u) => u.id === id);
+      return user
+        ? {
+            userName: user.name,
+            userEmail: user.email,
+            userRole: user.role,
+            userActive: user.active,
+          }
+        : undefined;
+    }
+    case "Chalet": {
+      const chalet = chaletOf(id);
+      return chalet
+        ? {
+            chalet: chaletLabel(chalet),
+            chaletStatus: chalet.status,
+            chaletOwner: chalet.ownerId ? (userName(chalet.ownerId) ?? null) : null,
+          }
+        : undefined;
+    }
+    case "Event": {
+      const event = db.events.find((e) => e.id === id);
+      return event
+        ? {
+            event: event.name,
+            eventStart: event.startDate,
+            eventEnd: event.endDate,
+            eventStatus: event.status,
+          }
+        : undefined;
+    }
+    case "Reservation": {
+      const reservation = db.reservations.find((r) => r.id === id);
+      const chalet = chaletOf(reservation?.chaletId);
+      return reservation
+        ? {
+            event: eventName(reservation.eventId) ?? null,
+            chalet: chalet ? chaletLabel(chalet) : null,
+            responsible: userName(reservation.responsibleId) ?? null,
+            checkIn: reservation.checkIn,
+            checkOut: reservation.checkOut,
+            adults: reservation.adults,
+            children: reservation.children,
+            alcoholConsumers: reservation.alcoholConsumers,
+            notes: reservation.notes,
+            reservationStatus: reservation.status,
+          }
+        : undefined;
+    }
+    case "Purchase": {
+      const purchase = db.purchases.find((p) => p.id === id);
+      const chalet = chaletOf(purchase?.chaletId);
+      return purchase
+        ? {
+            event: eventName(purchase.eventId) ?? null,
+            description: purchase.description,
+            category: purchase.category,
+            amountCents: purchase.amountCents,
+            purchaseDate: purchase.date,
+            responsible: userName(purchase.responsibleId) ?? null,
+            chalet: chalet ? chaletLabel(chalet) : null,
+            hasReceipt: purchase.receiptDataUrl !== null,
+          }
+        : undefined;
+    }
+    // O rateio é identificado pelo evento.
+    case "Settlement": {
+      const event = db.events.find((e) => e.id === id);
+      if (!event) return undefined;
+      const items = db.settlements.find((s) => s.eventId === id)?.items ?? [];
+      return {
+        event: event.name,
+        totalCents: items.reduce((sum, item) => sum + item.totalCents, 0),
+        chaletsCount: items.length,
+      };
+    }
+    case "Payment": {
+      const payment = db.payments.find((p) => p.id === id);
+      const chalet = chaletOf(payment?.chaletId);
+      return payment
+        ? {
+            event: eventName(payment.eventId) ?? null,
+            chalet: chalet ? chaletLabel(chalet) : null,
+            amountCents: payment.amountCents,
+            paymentDate: payment.date,
+            notes: payment.notes,
+          }
+        : undefined;
+    }
+    case "Receivable": {
+      const receivable = db.receivables.find((r) => r.id === id);
+      const chalet = chaletOf(receivable?.chaletId);
+      return receivable
+        ? {
+            event: eventName(receivable.eventId) ?? null,
+            chalet: chalet ? chaletLabel(chalet) : null,
+            amountCents: receivable.amountCents,
+            receivableStatus: receivable.status,
+            notes: receivable.notes,
+          }
+        : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
 /** Mesmo mapa semântico do backend real (interceptor de auditoria). */
 const AUDIT_ROUTES: Array<{
   method: string;
@@ -663,6 +797,9 @@ const AUDIT_ROUTES: Array<{
   action: string;
   entity: string;
 }> = [
+  // As rotas "me" vêm antes de /users/:id para não caírem no padrão genérico.
+  { method: "PATCH", pattern: /^\/users\/me$/, action: "PROFILE_UPDATED", entity: "User" },
+  { method: "POST", pattern: /^\/users\/me\/password$/, action: "PASSWORD_CHANGED", entity: "User" },
   { method: "POST", pattern: /^\/users$/, action: "USER_CREATED", entity: "User" },
   { method: "PATCH", pattern: /^\/users\/([^/]+)$/, action: "USER_UPDATED", entity: "User" },
   { method: "DELETE", pattern: /^\/users\/([^/]+)$/, action: "USER_DELETED", entity: "User" },
@@ -699,16 +836,45 @@ export function demoApi(pathWithQuery: string, method: string, body?: unknown): 
     body: (body ?? {}) as Record<string, unknown>,
   };
   const db = loadDb();
+  const match = MUTATING.has(method)
+    ? AUDIT_ROUTES.find((r) => r.method === method && r.pattern.test(path))
+    : undefined;
+
+  // Rotas "me" não têm id na URL: o alvo é o próprio usuário logado.
+  const paramId = path.startsWith("/users/me")
+    ? (demoSession()?.id ?? null)
+    : (match?.pattern.exec(path)?.[1] ?? null);
+
+  // Em exclusões o registro some depois: fotografa antes.
+  const deletedSnapshot =
+    match && method === "DELETE"
+      ? describeEntity(db, match.entity, paramId)
+      : undefined;
+
   const result = route(db, req);
-  if (MUTATING.has(method)) {
-    const match = AUDIT_ROUTES.find(
-      (r) => r.method === method && r.pattern.test(path),
+
+  if (match) {
+    // Criações não têm id na rota: ele só existe na resposta.
+    const entityId = paramId ?? (result as { id?: string } | undefined)?.id ?? null;
+    const snapshot = deletedSnapshot ?? describeEntity(db, match.entity, entityId);
+    const extra =
+      match.action === "SETTLEMENT_AUTO_CONFIGURED"
+        ? {
+            mode: (result as { mode?: string }).mode,
+            intervalMinutes: (result as { intervalMinutes?: number }).intervalMinutes ?? null,
+          }
+        : {};
+    const metadata = { ...snapshot, ...extra };
+    logAudit(
+      db,
+      demoSession()?.id ?? null,
+      match.action,
+      match.entity,
+      entityId,
+      Object.keys(metadata).length > 0 ? metadata : null,
     );
-    if (match) {
-      const entityId = match.pattern.exec(path)?.[1] ?? null;
-      logAudit(db, demoSession()?.id ?? null, match.action, match.entity, entityId);
-    }
   }
+
   saveDb(db);
   return result;
 }
@@ -1211,8 +1377,12 @@ function route(db: Db, req: DemoRequest): unknown {
     ) {
       throw new DemoApiError(409, "Já existe um usuário com este nome.");
     }
+    if ((db.userSeq ?? 0) >= MAX_USERS) {
+      throw new DemoApiError(409, "Limite de usuários do protótipo atingido.");
+    }
+    db.userSeq = (db.userSeq ?? 0) + 1;
     const created: DbUser = {
-      id: `u-${uid()}`,
+      id: `u${db.userSeq}`,
       name: String(body.name),
       email: String(body.email),
       password: String(body.password),
@@ -1422,6 +1592,7 @@ export async function demoAttachReceipt(purchaseId: string, file: File): Promise
     "PURCHASE_RECEIPT_ATTACHED",
     "Purchase",
     purchaseId,
+    { ...describeEntity(db, "Purchase", purchaseId), fileName: file.name },
   );
   saveDb(db);
   return purchaseResponse(db, purchase);
@@ -1445,6 +1616,10 @@ export async function demoSetAvatar(file: File): Promise<unknown> {
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
     reader.readAsDataURL(file);
+  });
+  logAudit(db, me.id, "AVATAR_UPDATED", "User", me.id, {
+    ...describeEntity(db, "User", me.id),
+    fileName: file.name,
   });
   syncSession(db, me.id);
   saveDb(db);
