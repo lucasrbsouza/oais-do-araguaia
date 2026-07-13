@@ -7,6 +7,7 @@ import {
 import { AuthenticatedUser } from '../../../../shared/infrastructure/auth/decorators';
 import { ChaletRepository } from '../../../chalets/domain/chalet.repository';
 import { EventRepository } from '../../../events/domain/event.repository';
+import { AutoSettlementService } from '../../../settlement/application/auto-settlement.service';
 import { FileStorage } from '../../domain/file-storage';
 import {
   PurchaseDetail,
@@ -82,6 +83,10 @@ const storage: FileStorage = {
   delete: jest.fn().mockResolvedValue(undefined),
 };
 
+const autoSettlement = {
+  onPurchaseChange: jest.fn().mockResolvedValue(undefined),
+} as unknown as AutoSettlementService;
+
 const input = {
   eventId: 'e1',
   date: new Date('2030-01-04'),
@@ -98,6 +103,7 @@ describe('CreatePurchaseUseCase', () => {
       repo,
       makeGate('OPEN'),
       makeChaletGate(),
+      autoSettlement,
     );
     await useCase.execute(input, admin);
     expect(repo.create).toHaveBeenCalled();
@@ -109,6 +115,7 @@ describe('CreatePurchaseUseCase', () => {
       repo,
       makeGate('OPEN'),
       makeChaletGate(true),
+      autoSettlement,
     );
     await useCase.execute({ ...input, chaletId: 'c1' }, admin);
     expect(repo.create).toHaveBeenCalledWith(
@@ -121,6 +128,7 @@ describe('CreatePurchaseUseCase', () => {
       makePurchaseRepo(),
       makeGate('OPEN'),
       makeChaletGate(false),
+      autoSettlement,
     );
     await expect(
       useCase.execute({ ...input, chaletId: 'x' }, admin),
@@ -133,6 +141,7 @@ describe('CreatePurchaseUseCase', () => {
       repo,
       makeGate('OPEN'),
       makeChaletGate(),
+      autoSettlement,
     );
     await useCase.execute(input, owner);
     expect(repo.create).toHaveBeenCalledWith(
@@ -145,6 +154,7 @@ describe('CreatePurchaseUseCase', () => {
       makePurchaseRepo(),
       makeGate('OPEN'),
       makeChaletGate(),
+      autoSettlement,
     );
     await expect(
       useCase.execute({ ...input, chaletId: 'outro' }, owner),
@@ -156,6 +166,7 @@ describe('CreatePurchaseUseCase', () => {
       makePurchaseRepo(),
       makeGate('OPEN'),
       makeChaletGate(true, []),
+      autoSettlement,
     );
     await expect(useCase.execute(input, owner)).rejects.toThrow(ForbiddenError);
   });
@@ -165,6 +176,7 @@ describe('CreatePurchaseUseCase', () => {
       makePurchaseRepo(),
       makeGate('CLOSED'),
       makeChaletGate(),
+      autoSettlement,
     );
     await expect(useCase.execute(input, admin)).rejects.toThrow(ConflictError);
   });
@@ -174,6 +186,7 @@ describe('CreatePurchaseUseCase', () => {
       makePurchaseRepo(),
       makeGate(null),
       makeChaletGate(),
+      autoSettlement,
     );
     await expect(useCase.execute(input, admin)).rejects.toThrow(NotFoundError);
   });
@@ -191,6 +204,7 @@ describe('DeletePurchaseUseCase', () => {
       makeGate('OPEN'),
       storage,
       makeChaletGate(),
+      autoSettlement,
     );
     await useCase.execute('p1', admin);
     expect(storage.delete).toHaveBeenCalledWith('r.pdf');
@@ -206,6 +220,7 @@ describe('DeletePurchaseUseCase', () => {
       makeGate('OPEN'),
       storage,
       makeChaletGate(),
+      autoSettlement,
     );
     await expect(useCase.execute('x', admin)).rejects.toThrow(NotFoundError);
   });

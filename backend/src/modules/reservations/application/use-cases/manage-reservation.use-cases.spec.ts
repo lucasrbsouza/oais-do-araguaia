@@ -67,6 +67,7 @@ const makeReservationRepo = (
   findActiveByEventAndChalet: jest.fn().mockResolvedValue(null),
   create: jest.fn().mockResolvedValue(reservation),
   update: jest.fn().mockResolvedValue(reservation),
+  delete: jest.fn().mockResolvedValue(undefined),
   cancel: jest.fn().mockResolvedValue({ ...reservation, status: 'CANCELLED' }),
   list: jest.fn().mockResolvedValue([reservation]),
   ...overrides,
@@ -184,24 +185,23 @@ describe('CreateReservationUseCase', () => {
 });
 
 describe('UpdateReservationUseCase', () => {
-  it('responsável atualiza a própria reserva', async () => {
+  it('admin atualiza reserva', async () => {
     const repo = makeReservationRepo();
     const useCase = new UpdateReservationUseCase(repo, makeEventRepo());
-    await useCase.execute({ id: 'r1', adults: 3 }, owner);
+    await useCase.execute({ id: 'r1', adults: 3 }, admin);
     expect(repo.update).toHaveBeenCalledWith(
       'r1',
       expect.objectContaining({ adults: 3 }),
     );
   });
 
-  it('terceiro não altera reserva alheia', async () => {
-    const stranger: AuthenticatedUser = { ...owner, id: 'stranger' };
+  it('proprietário não altera reserva, mesmo sendo o responsável', async () => {
     const useCase = new UpdateReservationUseCase(
       makeReservationRepo(),
       makeEventRepo(),
     );
     await expect(
-      useCase.execute({ id: 'r1', adults: 3 }, stranger),
+      useCase.execute({ id: 'r1', adults: 3 }, owner),
     ).rejects.toThrow(ForbiddenError);
   });
 });
@@ -220,5 +220,13 @@ describe('CancelReservationUseCase', () => {
       makeEventRepo({ ...openEvent, status: 'CLOSED' }),
     );
     await expect(useCase.execute('r1', admin)).rejects.toThrow(ConflictError);
+  });
+
+  it('proprietário não cancela a própria reserva', async () => {
+    const useCase = new CancelReservationUseCase(
+      makeReservationRepo(),
+      makeEventRepo(),
+    );
+    await expect(useCase.execute('r1', owner)).rejects.toThrow(ForbiddenError);
   });
 });

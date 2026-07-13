@@ -31,6 +31,7 @@ export interface EventReport {
   settlement: Array<{
     chaletNumber: number;
     chaletName: string;
+    ownerName: string | null;
     commonCents: number;
     alcoholCents: number;
     totalCents: number;
@@ -72,7 +73,7 @@ export class ReportsQueryService {
         settlement: {
           include: {
             items: {
-              include: { chalet: true },
+              include: { chalet: { include: { owner: true } } },
               orderBy: { chalet: { number: 'asc' } },
             },
           },
@@ -153,6 +154,7 @@ export class ReportsQueryService {
           return {
             chaletNumber: item.chalet.number,
             chaletName: item.chalet.name,
+            ownerName: item.chalet.owner?.name ?? null,
             commonCents: item.commonCents,
             alcoholCents: item.alcoholCents,
             totalCents: item.totalCents,

@@ -10,6 +10,7 @@ import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { CurrentUser } from '../../../shared/infrastructure/auth/decorators';
 import type { AuthenticatedUser } from '../../../shared/infrastructure/auth/decorators';
+import { AuditService } from '../../audit/audit.service';
 import {
   ExportFile,
   ReportExportService,
@@ -27,6 +28,7 @@ export class ReportsController {
   constructor(
     private readonly reports: ReportsQueryService,
     private readonly exports: ReportExportService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get('events/:eventId')
@@ -43,8 +45,16 @@ export class ReportsController {
   async exportEventXlsx(
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Res({ passthrough: true }) res: Response,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<StreamableFile> {
     const file = await this.exports.exportEventXlsx(eventId);
+    await this.audit.log({
+      userId: user.id,
+      action: 'REPORT_EXPORTED',
+      entity: 'Report',
+      entityId: eventId,
+      metadata: { format: 'xlsx' },
+    });
     return this.toStreamableFile(file, res);
   }
 
@@ -53,8 +63,16 @@ export class ReportsController {
   async exportEventPdf(
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Res({ passthrough: true }) res: Response,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<StreamableFile> {
     const file = await this.exports.exportEventPdf(eventId);
+    await this.audit.log({
+      userId: user.id,
+      action: 'REPORT_EXPORTED',
+      entity: 'Report',
+      entityId: eventId,
+      metadata: { format: 'pdf' },
+    });
     return this.toStreamableFile(file, res);
   }
 

@@ -130,7 +130,7 @@ export default function EventDetailClient() {
               aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted hover:text-ink",
+                "whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted hover:text-ink cursor-pointer",
                 tab === t.id && "border-ink text-ink",
               )}
             >

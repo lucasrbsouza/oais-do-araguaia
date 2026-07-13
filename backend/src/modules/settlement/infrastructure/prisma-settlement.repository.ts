@@ -3,10 +3,12 @@ import { PurchaseCategory } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
 import { SettlementShare } from '../domain/expense-sharing.strategy';
 import {
+  SettlementAutoConfig,
   SettlementCalculationInput,
   SettlementRepository,
   SettlementView,
 } from '../domain/settlement.repository';
+import { syncEventReceivables } from './sync-receivables';
 
 @Injectable()
 export class PrismaSettlementRepository implements SettlementRepository {
@@ -71,7 +73,40 @@ export class PrismaSettlementRepository implements SettlementRepository {
           },
         },
       });
+      await syncEventReceivables(tx, eventId, shares);
     });
+  }
+
+  async getAutoConfig(eventId: string): Promise<SettlementAutoConfig | null> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { settlementAutoMode: true, settlementAutoMinutes: true },
+    });
+    if (!event) return null;
+    return {
+      mode: event.settlementAutoMode,
+      intervalMinutes: event.settlementAutoMinutes,
+    };
+  }
+
+  async setAutoConfig(
+    eventId: string,
+    config: SettlementAutoConfig,
+    setById: string,
+  ): Promise<SettlementAutoConfig> {
+    const event = await this.prisma.event.update({
+      where: { id: eventId },
+      data: {
+        settlementAutoMode: config.mode,
+        settlementAutoMinutes: config.intervalMinutes,
+        settlementAutoSetById: setById,
+      },
+      select: { settlementAutoMode: true, settlementAutoMinutes: true },
+    });
+    return {
+      mode: event.settlementAutoMode,
+      intervalMinutes: event.settlementAutoMinutes,
+    };
   }
 
   async findByEvent(eventId: string): Promise<SettlementView | null> {

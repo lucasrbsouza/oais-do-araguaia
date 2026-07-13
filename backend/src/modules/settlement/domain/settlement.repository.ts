@@ -1,4 +1,4 @@
-import { EventStatus } from '@prisma/client';
+import { EventStatus, SettlementAutoMode } from '@prisma/client';
 import { ChaletOccupancy, SettlementShare } from './expense-sharing.strategy';
 
 export interface SettlementCalculationInput {
@@ -28,6 +28,11 @@ export interface SettlementView {
   items: SettlementItemView[];
 }
 
+export interface SettlementAutoConfig {
+  mode: SettlementAutoMode;
+  intervalMinutes: number | null;
+}
+
 export abstract class SettlementRepository {
   abstract getCalculationInput(
     eventId: string,
@@ -39,4 +44,10 @@ export abstract class SettlementRepository {
     computedById: string,
   ): Promise<void>;
   abstract findByEvent(eventId: string): Promise<SettlementView | null>;
+  abstract getAutoConfig(eventId: string): Promise<SettlementAutoConfig | null>;
+  abstract setAutoConfig(
+    eventId: string,
+    config: SettlementAutoConfig,
+    setById: string,
+  ): Promise<SettlementAutoConfig>;
 }

@@ -48,5 +48,6 @@ export abstract class ReservationRepository {
     data: UpdateReservationData,
   ): Promise<ReservationDetail>;
   abstract cancel(id: string): Promise<ReservationDetail>;
+  abstract delete(id: string): Promise<void>;
   abstract list(filter: ListReservationsFilter): Promise<ReservationDetail[]>;
 }

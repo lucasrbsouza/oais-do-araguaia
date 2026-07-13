@@ -6,7 +6,6 @@ import {
 } from '../../../../shared/domain/domain-error';
 import { DateRange } from '../../../../shared/domain/date-range';
 import { Money } from '../../../../shared/domain/money';
-import { AuditService } from '../../../audit/audit.service';
 import { ExpenseSharingStrategy } from '../../../settlement/domain/expense-sharing.strategy';
 import { SettlementRepository } from '../../../settlement/domain/settlement.repository';
 import {
@@ -91,7 +90,6 @@ export class UpdateEventUseCase {
 export class CancelEventUseCase {
   constructor(
     private readonly eventRepository: EventRepository,
-    private readonly auditService: AuditService,
   ) {}
 
   async execute(eventId: string, cancelledById: string): Promise<Event> {
@@ -109,12 +107,6 @@ export class CancelEventUseCase {
     }
 
     const cancelled = await this.eventRepository.cancel(eventId);
-    await this.auditService.log({
-      userId: cancelledById,
-      action: 'EVENT_CANCELLED',
-      entity: 'Event',
-      entityId: eventId,
-    });
     return cancelled;
   }
 }
@@ -123,7 +115,6 @@ export class CancelEventUseCase {
 export class DeleteEventUseCase {
   constructor(
     private readonly eventRepository: EventRepository,
-    private readonly auditService: AuditService,
   ) {}
 
   async execute(eventId: string, deletedById: string): Promise<void> {
@@ -139,12 +130,6 @@ export class DeleteEventUseCase {
     }
 
     await this.eventRepository.delete(eventId);
-    await this.auditService.log({
-      userId: deletedById,
-      action: 'EVENT_DELETED',
-      entity: 'Event',
-      entityId: eventId,
-    });
   }
 }
 
@@ -176,7 +161,6 @@ export class CloseEventUseCase {
     private readonly eventRepository: EventRepository,
     private readonly settlementRepository: SettlementRepository,
     private readonly strategy: ExpenseSharingStrategy,
-    private readonly auditService: AuditService,
   ) {}
 
   async execute(eventId: string, closedById: string): Promise<Event> {
@@ -209,12 +193,6 @@ export class CloseEventUseCase {
       shares,
       closedById,
     );
-    await this.auditService.log({
-      userId: closedById,
-      action: 'EVENT_CLOSED',
-      entity: 'Event',
-      entityId: eventId,
-    });
     return closed;
   }
 }
@@ -223,7 +201,6 @@ export class CloseEventUseCase {
 export class ReopenEventUseCase {
   constructor(
     private readonly eventRepository: EventRepository,
-    private readonly auditService: AuditService,
   ) {}
 
   async execute(eventId: string, reopenedById: string): Promise<Event> {
@@ -236,12 +213,6 @@ export class ReopenEventUseCase {
     }
 
     const reopened = await this.eventRepository.reopen(eventId);
-    await this.auditService.log({
-      userId: reopenedById,
-      action: 'EVENT_REOPENED',
-      entity: 'Event',
-      entityId: eventId,
-    });
     return reopened;
   }
 }

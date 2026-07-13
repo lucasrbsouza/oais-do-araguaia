@@ -27,6 +27,7 @@ export interface ChaletPaymentSummary {
   chaletId: string;
   chaletNumber: number;
   chaletName: string;
+  ownerName: string | null;
   owedCents: number;
   paidCents: number;
   /** Compras/adiantamentos lançados vinculados ao chalé. */
@@ -97,6 +98,11 @@ export class GetEventPaymentsUseCase {
       advances.map((a) => [a.chaletId, a.totalCents]),
     );
 
+    const chalets = await this.chaletRepository.list();
+    const ownerNameByChalet = new Map(
+      chalets.map((c) => [c.id, c.owner?.name ?? null]),
+    );
+
     let items = settlement.items;
     if (user.role !== Role.ADMIN) {
       const ownChalets = await this.chaletRepository.findByOwner(user.id);
@@ -118,6 +124,7 @@ export class GetEventPaymentsUseCase {
         chaletId: item.chaletId,
         chaletNumber: item.chaletNumber,
         chaletName: item.chaletName,
+        ownerName: ownerNameByChalet.get(item.chaletId) ?? null,
         owedCents: item.totalCents,
         paidCents,
         advanceCents,

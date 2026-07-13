@@ -33,6 +33,12 @@ const makeRepo = (
     alcoholTotalCents: 0,
   }),
   save: jest.fn().mockResolvedValue(undefined),
+  getAutoConfig: jest
+    .fn()
+    .mockResolvedValue({ mode: 'MANUAL', intervalMinutes: null }),
+  setAutoConfig: jest
+    .fn()
+    .mockResolvedValue({ mode: 'MANUAL', intervalMinutes: null }),
   findByEvent: jest.fn().mockResolvedValue(view),
   ...overrides,
 });

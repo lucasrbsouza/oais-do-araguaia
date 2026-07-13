@@ -47,7 +47,7 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
             aria-selected={view === key}
             onClick={() => setView(key)}
             className={cn(
-              "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+              "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors cursor-pointer",
               view === key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted hover:text-ink",
@@ -121,6 +121,7 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
         <thead>
           <tr>
             <Th>Chalé</Th>
+            <Th>Proprietário</Th>
             <Th className="text-right">Devido</Th>
             <Th className="text-right">Adiantamentos</Th>
             <Th className="text-right">Pago</Th>
@@ -136,6 +137,7 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
               <Td className="font-medium text-ink">
                 {item.chaletNumber} — {item.chaletName}
               </Td>
+              <Td>{item.ownerName ?? <span className="text-muted-soft">—</span>}</Td>
               <Td className="text-right">{formatCents(item.owedCents)}</Td>
               <Td className="text-right">{formatCents(item.advanceCents)}</Td>
               <Td className="text-right">{formatCents(item.paidCents)}</Td>
@@ -270,7 +272,7 @@ function ReceivableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolea
     return (
       <EmptyState
         title="Nenhum crédito a receber"
-        description="Créditos são gerados automaticamente ao encerrar o evento, quando adiantamentos e pagamentos de um chalé superam o valor devido no rateio."
+        description="Créditos são gerados automaticamente a cada cálculo do rateio, quando adiantamentos e pagamentos de um chalé superam o valor devido."
       />
     );
   }

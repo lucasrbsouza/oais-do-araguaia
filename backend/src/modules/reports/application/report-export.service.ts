@@ -43,6 +43,7 @@ interface PurchaseRow {
 
 interface ChaletShareRow {
   chaletName: string;
+  ownerName: string | null;
   adults: number;
   children: number;
   alcoholConsumers: number;
@@ -164,7 +165,7 @@ export class ReportExportService {
         settlement: {
           include: {
             items: {
-              include: { chalet: true },
+              include: { chalet: { include: { owner: true } } },
               orderBy: { chalet: { number: 'asc' } },
             },
           },
@@ -239,6 +240,7 @@ export class ReportExportService {
         const advanceCents = advanceByChalet.get(item.chaletId) ?? 0;
         return {
           chaletName: item.chalet.name,
+          ownerName: item.chalet.owner?.name ?? null,
           adults: reservation?.adults ?? 0,
           children: reservation?.children ?? 0,
           alcoholConsumers: reservation?.alcoholConsumers ?? 0,
@@ -431,6 +433,7 @@ export class ReportExportService {
       sectionRow('VALOR POR CHALÉ — ACERTO');
       headerRow([
         'Chalé',
+        'Proprietário',
         'Total a pagar',
         'Adiantamentos',
         'Pagamentos',
@@ -440,19 +443,21 @@ export class ReportExportService {
       for (const s of data.shares) {
         const row = sheet.addRow([
           s.chaletName,
+          s.ownerName ?? '—',
           toReais(s.totalCents),
           toReais(s.advanceCents),
           toReais(s.paidCents),
           toReais(s.balanceCents),
           STATUS_LABELS[s.status],
         ]);
-        [2, 3, 4, 5].forEach((c) => (row.getCell(c).numFmt = MONEY_FMT));
+        [3, 4, 5, 6].forEach((c) => (row.getCell(c).numFmt = MONEY_FMT));
         if (s.balanceCents < 0) {
-          row.getCell(5).font = { color: { argb: 'FFC0392B' } };
+          row.getCell(6).font = { color: { argb: 'FFC0392B' } };
         }
       }
       const totals = sheet.addRow([
         'TOTAL GERAL',
+        '',
         toReais(data.shares.reduce((s, r) => s + r.totalCents, 0)),
         toReais(data.shares.reduce((s, r) => s + r.advanceCents, 0)),
         toReais(data.shares.reduce((s, r) => s + r.paidCents, 0)),
@@ -460,7 +465,7 @@ export class ReportExportService {
         '',
       ]);
       totals.font = { bold: true };
-      [2, 3, 4, 5].forEach((c) => (totals.getCell(c).numFmt = MONEY_FMT));
+      [3, 4, 5, 6].forEach((c) => (totals.getCell(c).numFmt = MONEY_FMT));
     }
 
     return Buffer.from(await workbook.xlsx.writeBuffer());
@@ -700,6 +705,7 @@ export class ReportExportService {
         drawTable(
           [
             'Chalé',
+            'Proprietário',
             'Total a pagar',
             'Adiantamentos',
             'Pagamentos',
@@ -709,6 +715,7 @@ export class ReportExportService {
           [
             ...data.shares.map((s) => [
               s.chaletName,
+              s.ownerName ?? '—',
               formatMoney(s.totalCents),
               formatMoney(s.advanceCents),
               formatMoney(s.paidCents),
@@ -717,6 +724,7 @@ export class ReportExportService {
             ]),
             [
               'TOTAL GERAL',
+              '',
               formatMoney(data.shares.reduce((s, r) => s + r.totalCents, 0)),
               formatMoney(data.shares.reduce((s, r) => s + r.advanceCents, 0)),
               formatMoney(data.shares.reduce((s, r) => s + r.paidCents, 0)),
@@ -724,7 +732,7 @@ export class ReportExportService {
               '',
             ],
           ],
-          [100, 80, 80, 80, 80, 70],
+          [85, 85, 68, 68, 68, 66, 60],
           { boldLastRow: true },
         );
       }

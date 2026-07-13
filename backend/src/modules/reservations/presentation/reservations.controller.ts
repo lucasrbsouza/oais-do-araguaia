@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -25,12 +27,16 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { CurrentUser } from '../../../shared/infrastructure/auth/decorators';
+import {
+  CurrentUser,
+  Roles,
+} from '../../../shared/infrastructure/auth/decorators';
 import type { AuthenticatedUser } from '../../../shared/infrastructure/auth/decorators';
 import { ReservationResponse } from '../application/reservation.mapper';
 import {
   CancelReservationUseCase,
   CreateReservationUseCase,
+  DeleteReservationUseCase,
   ListReservationsUseCase,
   UpdateReservationUseCase,
 } from '../application/use-cases/manage-reservation.use-cases';
@@ -156,6 +162,7 @@ export class ReservationsController {
     private readonly createReservation: CreateReservationUseCase,
     private readonly updateReservation: UpdateReservationUseCase,
     private readonly cancelReservation: CancelReservationUseCase,
+    private readonly deleteReservation: DeleteReservationUseCase,
     private readonly listReservations: ListReservationsUseCase,
   ) {}
 
@@ -176,6 +183,7 @@ export class ReservationsController {
   }
 
   @Patch(':id')
+  @Roles('ADMIN')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReservationDto,
@@ -184,11 +192,20 @@ export class ReservationsController {
     return this.updateReservation.execute({ id, ...dto }, user);
   }
 
-  @Delete(':id')
+  @Post(':id/cancel')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.OK)
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<ReservationResponse> {
     return this.cancelReservation.execute(id, user);
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  delete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.deleteReservation.execute(id);
   }
 }

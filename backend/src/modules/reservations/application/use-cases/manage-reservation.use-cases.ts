@@ -12,7 +12,6 @@ import { ChaletRepository } from '../../../chalets/domain/chalet.repository';
 import { EventRepository } from '../../../events/domain/event.repository';
 import {
   ListReservationsFilter,
-  ReservationDetail,
   ReservationRepository,
 } from '../../domain/reservation.repository';
 import {
@@ -66,16 +65,10 @@ function ensureStayWithinEvent(
   }
 }
 
-function ensureCanManage(
-  reservation: ReservationDetail,
-  user: AuthenticatedUser,
-): void {
-  if (user.role === Role.ADMIN) return;
-  const isResponsible = reservation.responsibleId === user.id;
-  const isChaletOwner = reservation.chalet.ownerId === user.id;
-  if (!isResponsible && !isChaletOwner) {
+function ensureCanManage(user: AuthenticatedUser): void {
+  if (user.role !== Role.ADMIN) {
     throw new ForbiddenError(
-      'Você só pode alterar reservas do seu próprio chalé.',
+      'Somente administradores podem alterar reservas.',
     );
   }
 }
@@ -153,7 +146,7 @@ export class UpdateReservationUseCase {
     if (!reservation) {
       throw new NotFoundError('Reserva não encontrada.');
     }
-    ensureCanManage(reservation, user);
+    ensureCanManage(user);
 
     const event = await this.eventRepository.findById(reservation.eventId);
     if (!event) {
@@ -193,7 +186,7 @@ export class CancelReservationUseCase {
     if (!reservation) {
       throw new NotFoundError('Reserva não encontrada.');
     }
-    ensureCanManage(reservation, user);
+    ensureCanManage(user);
 
     const event = await this.eventRepository.findById(reservation.eventId);
     if (event) {
@@ -202,6 +195,21 @@ export class CancelReservationUseCase {
 
     const cancelled = await this.reservationRepository.cancel(id);
     return toReservationResponse(cancelled);
+  }
+}
+
+@Injectable()
+export class DeleteReservationUseCase {
+  constructor(
+    private readonly reservationRepository: ReservationRepository,
+  ) {}
+
+  async execute(id: string): Promise<void> {
+    const reservation = await this.reservationRepository.findById(id);
+    if (!reservation) {
+      throw new NotFoundError('Reserva não encontrada.');
+    }
+    await this.reservationRepository.delete(id);
   }
 }
 

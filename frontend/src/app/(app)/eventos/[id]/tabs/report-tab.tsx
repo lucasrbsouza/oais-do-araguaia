@@ -135,6 +135,7 @@ export function ReportTab({ eventId }: { eventId: string }) {
               <thead>
                 <tr>
                   <Th>Chalé</Th>
+                  <Th>Proprietário</Th>
                   <Th className="text-right">Comum</Th>
                   <Th className="text-right">Álcool</Th>
                   <Th className="text-right">Total</Th>
@@ -149,6 +150,7 @@ export function ReportTab({ eventId }: { eventId: string }) {
                     <Td className="font-medium text-ink">
                       {row.chaletNumber} — {row.chaletName}
                     </Td>
+                    <Td>{row.ownerName ?? <span className="text-muted-soft">—</span>}</Td>
                     <Td className="text-right">{formatCents(row.commonCents)}</Td>
                     <Td className="text-right">{formatCents(row.alcoholCents)}</Td>
                     <Td className="text-right font-semibold">{formatCents(row.totalCents)}</Td>

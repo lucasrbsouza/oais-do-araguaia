@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ChaletsModule } from '../chalets/chalets.module';
 import { EventsModule } from '../events/events.module';
+import { SettlementModule } from '../settlement/settlement.module';
 import {
   AttachReceiptUseCase,
   CreatePurchaseUseCase,
@@ -18,7 +19,7 @@ import { PrismaPurchaseRepository } from './infrastructure/prisma-purchase.repos
 import { PurchasesController } from './presentation/purchases.controller';
 
 @Module({
-  imports: [EventsModule, ChaletsModule],
+  imports: [EventsModule, ChaletsModule, SettlementModule],
   controllers: [PurchasesController],
   providers: [
     { provide: PurchaseRepository, useClass: PrismaPurchaseRepository },

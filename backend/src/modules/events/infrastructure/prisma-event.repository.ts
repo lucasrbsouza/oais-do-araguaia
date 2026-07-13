@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Event, EventStatus } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
 import { SettlementShare } from '../../settlement/domain/expense-sharing.strategy';
+import { syncEventReceivables } from '../../settlement/infrastructure/sync-receivables';
 import {
   CreateEventData,
   EventRepository,
@@ -101,45 +102,7 @@ export class PrismaEventRepository implements EventRepository {
         },
       });
 
-      // Contas a receber: se pagamentos + adiantamentos (compras vinculadas
-      // ao chalé) superam o devido no rateio, o excedente vira crédito.
-      await tx.receivable.deleteMany({ where: { eventId } });
-      const [payments, advances] = await Promise.all([
-        tx.payment.groupBy({
-          by: ['chaletId'],
-          where: { eventId },
-          _sum: { amountCents: true },
-        }),
-        tx.purchase.groupBy({
-          by: ['chaletId'],
-          where: { eventId, chaletId: { not: null } },
-          _sum: { amountCents: true },
-        }),
-      ]);
-      const paidByChalet = new Map(
-        payments.map((p) => [p.chaletId, p._sum.amountCents ?? 0]),
-      );
-      const advanceByChalet = new Map(
-        advances.map((a) => [a.chaletId as string, a._sum.amountCents ?? 0]),
-      );
-      const credits = shares
-        .map((share) => ({
-          chaletId: share.chaletId,
-          amountCents:
-            (paidByChalet.get(share.chaletId) ?? 0) +
-            (advanceByChalet.get(share.chaletId) ?? 0) -
-            share.totalCents,
-        }))
-        .filter((credit) => credit.amountCents > 0);
-      if (credits.length > 0) {
-        await tx.receivable.createMany({
-          data: credits.map((credit) => ({
-            eventId,
-            chaletId: credit.chaletId,
-            amountCents: credit.amountCents,
-          })),
-        });
-      }
+      await syncEventReceivables(tx, eventId, shares);
 
       return tx.event.update({
         where: { id: eventId },
@@ -149,13 +112,10 @@ export class PrismaEventRepository implements EventRepository {
   }
 
   reopen(eventId: string): Promise<Event> {
-    return this.prisma.$transaction(async (tx) => {
-      // Créditos são recalculados no próximo fechamento.
-      await tx.receivable.deleteMany({ where: { eventId } });
-      return tx.event.update({
-        where: { id: eventId },
-        data: { status: EventStatus.OPEN, closedAt: null, closedById: null },
-      });
+    // Créditos permanecem: são recalculados a cada novo rateio.
+    return this.prisma.event.update({
+      where: { id: eventId },
+      data: { status: EventStatus.OPEN, closedAt: null, closedById: null },
     });
   }
 

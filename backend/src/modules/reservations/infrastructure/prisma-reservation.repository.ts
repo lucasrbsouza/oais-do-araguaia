@@ -51,6 +51,10 @@ export class PrismaReservationRepository implements ReservationRepository {
     });
   }
 
+  async delete(id: string): Promise<void> {
+    await this.prisma.reservation.delete({ where: { id } });
+  }
+
   list(filter: ListReservationsFilter): Promise<ReservationDetail[]> {
     return this.prisma.reservation.findMany({
       where: {

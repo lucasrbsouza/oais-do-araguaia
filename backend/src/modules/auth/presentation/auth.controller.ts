@@ -61,9 +61,10 @@ export class AuthController {
   @Throttle({ default: { ttl: 60_000, limit: 5 } })
   async login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<SessionResponse> {
-    const result = await this.loginUseCase.execute(dto);
+    const result = await this.loginUseCase.execute({ ...dto, ip: req.ip });
     this.setRefreshCookie(res, result);
     return { accessToken: result.accessToken, user: result.user };
   }
@@ -92,6 +93,7 @@ export class AuthController {
   ): Promise<void> {
     await this.logoutUseCase.execute(
       (req.cookies as Record<string, string>)[REFRESH_COOKIE],
+      req.ip,
     );
     res.clearCookie(REFRESH_COOKIE, this.cookieOptions());
   }

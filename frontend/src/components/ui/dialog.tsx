@@ -39,7 +39,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
           <button
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-full p-1.5 text-muted hover:bg-surface-soft"
+            className="rounded-full p-1.5 text-muted hover:bg-surface-soft cursor-pointer"
           >
             <X className="size-4" />
           </button>

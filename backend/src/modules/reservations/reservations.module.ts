@@ -4,6 +4,7 @@ import { EventsModule } from '../events/events.module';
 import {
   CancelReservationUseCase,
   CreateReservationUseCase,
+  DeleteReservationUseCase,
   ListReservationsUseCase,
   UpdateReservationUseCase,
 } from './application/use-cases/manage-reservation.use-cases';
@@ -19,6 +20,7 @@ import { ReservationsController } from './presentation/reservations.controller';
     CreateReservationUseCase,
     UpdateReservationUseCase,
     CancelReservationUseCase,
+    DeleteReservationUseCase,
     ListReservationsUseCase,
   ],
   exports: [ReservationRepository],

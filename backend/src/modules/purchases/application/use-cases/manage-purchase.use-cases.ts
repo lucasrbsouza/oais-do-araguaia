@@ -8,6 +8,7 @@ import {
 import { AuthenticatedUser } from '../../../../shared/infrastructure/auth/decorators';
 import { ChaletRepository } from '../../../chalets/domain/chalet.repository';
 import { EventRepository } from '../../../events/domain/event.repository';
+import { AutoSettlementService } from '../../../settlement/application/auto-settlement.service';
 import { FileStorage } from '../../domain/file-storage';
 import {
   ListPurchasesFilter,
@@ -149,6 +150,7 @@ export class CreatePurchaseUseCase {
     private readonly purchaseRepository: PurchaseRepository,
     private readonly eventGate: PurchaseEventGate,
     private readonly chaletGate: PurchaseChaletGate,
+    private readonly autoSettlement: AutoSettlementService,
   ) {}
 
   async execute(
@@ -168,6 +170,7 @@ export class CreatePurchaseUseCase {
       ...input,
       chaletId,
     });
+    await this.autoSettlement.onPurchaseChange(input.eventId, user.id);
     return toPurchaseResponse(purchase);
   }
 }
@@ -178,6 +181,7 @@ export class UpdatePurchaseUseCase {
     private readonly purchaseRepository: PurchaseRepository,
     private readonly eventGate: PurchaseEventGate,
     private readonly chaletGate: PurchaseChaletGate,
+    private readonly autoSettlement: AutoSettlementService,
   ) {}
 
   async execute(
@@ -206,6 +210,7 @@ export class UpdatePurchaseUseCase {
       amountCents: input.amountCents,
       chaletId,
     });
+    await this.autoSettlement.onPurchaseChange(purchase.eventId, user.id);
     return toPurchaseResponse(updated);
   }
 }
@@ -217,6 +222,7 @@ export class DeletePurchaseUseCase {
     private readonly eventGate: PurchaseEventGate,
     private readonly fileStorage: FileStorage,
     private readonly chaletGate: PurchaseChaletGate,
+    private readonly autoSettlement: AutoSettlementService,
   ) {}
 
   async execute(id: string, user: AuthenticatedUser): Promise<void> {
@@ -230,6 +236,7 @@ export class DeletePurchaseUseCase {
       await this.fileStorage.delete(purchase.receiptPath);
     }
     await this.purchaseRepository.delete(id);
+    await this.autoSettlement.onPurchaseChange(purchase.eventId, user.id);
   }
 }
 
