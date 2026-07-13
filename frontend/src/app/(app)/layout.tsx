@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useSession } from "@/stores/session";
 import { UserAvatar } from "@/components/ui/avatar";
 import { ChangePasswordDialog } from "@/components/ui/change-password-dialog";
+import { LOGO_SRC } from "@/lib/assets";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -75,7 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <aside className="hidden w-60 shrink-0 flex-col border-r border-hairline bg-canvas md:flex">
         <div className="border-b border-hairline px-5 py-5 flex items-center gap-3">
           <img
-            src="/logo-sem-fundo.png"
+            src={LOGO_SRC}
             alt="Logo Oasís do Araguaia"
             className="size-10 object-contain"
           />
@@ -131,7 +132,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header className="flex items-center justify-between border-b border-hairline px-4 py-3 md:hidden">
           <div className="flex items-center gap-2">
             <img
-              src="/logo-sem-fundo.png"
+              src={LOGO_SRC}
               alt="Logo Oasís do Araguaia"
               className="size-8 object-contain"
             />

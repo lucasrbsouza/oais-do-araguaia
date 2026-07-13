@@ -9,6 +9,7 @@ import { IS_DEMO, login } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Field, PasswordField } from "@/components/ui/input";
 import { ErrorState } from "@/components/ui/states";
+import { LOGO_SRC } from "@/lib/assets";
 
 const schema = z.object({
   email: z.string().email("Informe um e-mail válido."),
@@ -100,7 +101,7 @@ export default function LoginPage() {
                 >
                   <div className="flex-1 flex items-center justify-center">
                     <img
-                      src="/logo-sem-fundo.png"
+                      src={LOGO_SRC}
                       alt=""
                       className="h-16 sm:h-20 object-contain opacity-100"
                     />
@@ -119,7 +120,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-md bg-canvas p-8 shadow-float z-10">
         <div className="flex items-center gap-3 mb-6">
           <img
-            src="/logo-sem-fundo.png"
+            src={LOGO_SRC}
             alt="Logo Oasís do Araguaia"
             className="size-12 object-contain"
           />
