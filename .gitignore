@@ -9,3 +9,14 @@ uploads/
 !.env.example
 *.log
 nginx/certs/
+
+# Ferramentas de desenvolvimento com IA (não versionar)
+.claude/
+.specs/
+.cursor/
+.windsurf/
+.continue/
+.aider*
+.mcp.json
+CLAUDE.md
+AGENTS.md
