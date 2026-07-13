@@ -112,7 +112,7 @@ export function ChangePasswordDialog({
           error={form.formState.errors.confirmPassword?.message}
           {...form.register("confirmPassword")}
         />
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           {firstLogin ? (
             <Button
               type="button"

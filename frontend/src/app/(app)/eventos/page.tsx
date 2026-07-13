@@ -35,14 +35,16 @@ type FormData = z.infer<typeof schema>;
 function TabCell({
   eventId,
   tab,
+  label,
   children,
 }: {
   eventId: string;
   tab: string;
+  label: string;
   children: React.ReactNode;
 }) {
   return (
-    <Td>
+    <Td label={label}>
       <Link
         href={`/eventos/${eventId}?tab=${tab}`}
         onClick={(e) => e.stopPropagation()}
@@ -150,7 +152,7 @@ export default function EventsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Eventos</h1>
         {isAdmin && (
           <Button
@@ -195,7 +197,7 @@ export default function EventsPage() {
                 className="cursor-pointer hover:bg-surface-soft/60"
                 onClick={() => router.push(`/eventos/${event.id}`)}
               >
-                <Td>
+                <Td label="Evento">
                   <Link
                     href={`/eventos/${event.id}`}
                     onClick={(e) => e.stopPropagation()}
@@ -204,24 +206,24 @@ export default function EventsPage() {
                     {event.name}
                   </Link>
                 </Td>
-                <Td>
+                <Td label="Período">
                   {formatDate(event.startDate)} – {formatDate(event.endDate)}
                 </Td>
-                <TabCell eventId={event.id} tab="reservas">
+                <TabCell eventId={event.id} tab="reservas" label="Reservas">
                   {event.reservationCount}
                 </TabCell>
-                <TabCell eventId={event.id} tab="compras">
+                <TabCell eventId={event.id} tab="compras" label="Compras">
                   {formatCents(event.purchaseTotalCents)}
                 </TabCell>
-                <TabCell eventId={event.id} tab="rateio">
+                <TabCell eventId={event.id} tab="rateio" label="Rateio">
                   {event.hasSettlement ? "Calculado" : "Calcular"}
                 </TabCell>
-                <Td>
+                <Td label="Status">
                   <EventStatusBadge status={event.status} />
                 </Td>
                 {isAdmin && (
                   <Td onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1 xl:flex-nowrap">
                       {event.status !== "CLOSED" && (
                         <Button variant="ghost" size="xs" onClick={() => openEdit(event)}>
                           Editar
@@ -306,7 +308,7 @@ export default function EventsPage() {
               {...form.register("endDate")}
             />
           </div>
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
@@ -352,7 +354,7 @@ export default function EventsPage() {
               {...editForm.register("endDate")}
             />
           </div>
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button type="button" variant="secondary" onClick={() => setEditTarget(null)}>
               Cancelar
             </Button>

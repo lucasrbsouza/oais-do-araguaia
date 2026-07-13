@@ -91,8 +91,8 @@ export default function EventDetailClient() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="text-2xl font-bold text-ink">{event.name}</h1>
             <EventStatusBadge status={event.status} />
           </div>

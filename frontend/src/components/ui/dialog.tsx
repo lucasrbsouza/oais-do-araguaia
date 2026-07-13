@@ -23,7 +23,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4"
       onClick={onClose}
       role="presentation"
     >
@@ -31,15 +31,15 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-md bg-canvas p-6 shadow-float"
+        className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-md bg-canvas p-4 shadow-float sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h2 className="min-w-0 text-lg font-semibold text-ink">{title}</h2>
           <button
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-full p-1.5 text-muted hover:bg-surface-soft cursor-pointer"
+            className="-m-1.5 flex size-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-soft cursor-pointer"
           >
             <X className="size-4" />
           </button>
@@ -74,7 +74,7 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onClose={onClose} title={title}>
       <p className="mb-6 text-sm text-body">{description}</p>
-      <div className="flex justify-end gap-3">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Button variant="secondary" onClick={onClose} disabled={loading}>
           Cancelar
         </Button>

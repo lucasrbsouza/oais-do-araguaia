@@ -34,7 +34,11 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 border-b border-hairline" role="tablist" aria-label="Contas">
+      <div
+        className="flex gap-1 overflow-x-auto border-b border-hairline"
+        role="tablist"
+        aria-label="Contas"
+      >
         {(
           [
             ["payable", "Contas a Pagar"],
@@ -47,7 +51,7 @@ export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: bo
             aria-selected={view === key}
             onClick={() => setView(key)}
             className={cn(
-              "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors cursor-pointer",
+              "-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors cursor-pointer",
               view === key
                 ? "border-primary text-primary"
                 : "border-transparent text-muted hover:text-ink",
@@ -134,14 +138,19 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
         <tbody>
           {data?.map((item) => (
             <tr key={item.chaletId}>
-              <Td className="font-medium text-ink">
+              <Td label="Chalé" className="font-medium text-ink">
                 {item.chaletNumber} — {item.chaletName}
               </Td>
-              <Td>{item.ownerName ?? <span className="text-muted-soft">—</span>}</Td>
-              <Td className="text-right">{formatCents(item.owedCents)}</Td>
-              <Td className="text-right">{formatCents(item.advanceCents)}</Td>
-              <Td className="text-right">{formatCents(item.paidCents)}</Td>
+              <Td label="Proprietário">
+                {item.ownerName ?? <span className="text-muted-soft">—</span>}
+              </Td>
+              <Td label="Devido" className="text-right">{formatCents(item.owedCents)}</Td>
+              <Td label="Adiantamentos" className="text-right">
+                {formatCents(item.advanceCents)}
+              </Td>
+              <Td label="Pago" className="text-right">{formatCents(item.paidCents)}</Td>
               <Td
+                label="Saldo"
                 className={cn(
                   "text-right font-semibold",
                   item.balanceCents > 0 ? "text-error" : "text-success",
@@ -151,10 +160,10 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
                   ? `${formatCents(-item.balanceCents)} (crédito)`
                   : formatCents(item.balanceCents)}
               </Td>
-              <Td>
+              <Td label="Status">
                 <PaymentStatusBadge status={item.status} />
               </Td>
-              <Td>
+              <Td label="Pagamentos">
                 {item.payments.length === 0 ? (
                   <span className="text-muted-soft">—</span>
                 ) : (
@@ -211,7 +220,7 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
                 {formatCents(payTarget.balanceCents)}
               </span>
             </p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
                 label="Data"
                 type="date"
@@ -227,7 +236,7 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
               />
             </div>
             <Field label="Observações" {...form.register("notes")} />
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="secondary" onClick={() => setPayTarget(null)}>
                 Cancelar
               </Button>
@@ -297,19 +306,19 @@ function ReceivableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolea
         <tbody>
           {data.map((r) => (
             <tr key={r.id}>
-              <Td className="font-medium text-ink">
+              <Td label="Chalé" className="font-medium text-ink">
                 {r.chaletNumber} — {r.chaletName}
               </Td>
-              <Td className="text-right font-semibold text-success">
+              <Td label="Valor do crédito" className="text-right font-semibold text-success">
                 {formatCents(r.amountCents)}
               </Td>
-              <Td>{formatDate(r.createdAt)}</Td>
-              <Td>
+              <Td label="Gerado em">{formatDate(r.createdAt)}</Td>
+              <Td label="Status">
                 <Badge tone={r.status === "SETTLED" ? "success" : "warning"}>
                   {RECEIVABLE_STATUS_LABELS[r.status]}
                 </Badge>
               </Td>
-              <Td>
+              <Td label="Observações">
                 {r.settledAt
                   ? `Quitado em ${formatDate(r.settledAt)}${r.notes ? ` · ${r.notes}` : ""}`
                   : (r.notes ?? "—")}

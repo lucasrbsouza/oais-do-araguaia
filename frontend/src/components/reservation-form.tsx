@@ -178,7 +178,7 @@ export function ReservationForm({ defaultEventId, reservation, onDone }: Reserva
           {...form.register("checkOut")}
         />
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <Field
           label="Adultos (8+)"
           type="number"
@@ -202,7 +202,7 @@ export function ReservationForm({ defaultEventId, reservation, onDone }: Reserva
         />
       </div>
       <Field label="Observações" error={form.formState.errors.notes?.message} {...form.register("notes")} />
-      <div className="flex justify-end gap-3">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Button type="button" variant="secondary" onClick={onDone}>
           Cancelar
         </Button>

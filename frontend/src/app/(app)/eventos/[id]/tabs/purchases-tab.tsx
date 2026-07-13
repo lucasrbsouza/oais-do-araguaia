@@ -222,7 +222,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
           Total: <span className="font-semibold text-ink">{formatCents(total)}</span>
         </p>
@@ -282,7 +282,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                 id="filter-category"
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="h-10 rounded-sm border border-hairline bg-canvas px-2 text-sm text-ink focus:border-ink focus:outline-none"
+                className="h-11 rounded-sm border border-hairline bg-canvas px-2 text-base text-ink focus:border-ink focus:outline-none sm:h-10 sm:text-sm"
               >
                 <option value="">Todas</option>
                 {PURCHASE_CATEGORIES.map((c) => (
@@ -302,7 +302,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                 id="filter-chalet"
                 value={filterChaletId}
                 onChange={(e) => setFilterChaletId(e.target.value)}
-                className="h-10 rounded-sm border border-hairline bg-canvas px-2 text-sm text-ink focus:border-ink focus:outline-none"
+                className="h-11 rounded-sm border border-hairline bg-canvas px-2 text-base text-ink focus:border-ink focus:outline-none sm:h-10 sm:text-sm"
               >
                 <option value="">Todos</option>
                 <option value="general">Geral (Sem chalé)</option>
@@ -323,7 +323,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                 id="filter-responsible"
                 value={filterResponsibleId}
                 onChange={(e) => setFilterResponsibleId(e.target.value)}
-                className="h-10 rounded-sm border border-hairline bg-canvas px-2 text-sm text-ink focus:border-ink focus:outline-none"
+                className="h-11 rounded-sm border border-hairline bg-canvas px-2 text-base text-ink focus:border-ink focus:outline-none sm:h-10 sm:text-sm"
               >
                 <option value="">Todos</option>
                 {uniqueResponsibles.map((r) => (
@@ -347,7 +347,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                 placeholder="Ex: 10.00"
                 value={filterMinAmount}
                 onChange={(e) => setFilterMinAmount(e.target.value)}
-                className="h-10 rounded-sm border border-hairline bg-canvas px-2 text-sm text-ink placeholder:text-muted-soft focus:border-ink focus:outline-none"
+                className="h-11 rounded-sm border border-hairline bg-canvas px-2 text-base text-ink placeholder:text-muted-soft focus:border-ink focus:outline-none sm:h-10 sm:text-sm"
               />
             </div>
 
@@ -364,7 +364,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                 placeholder="Ex: 200.00"
                 value={filterMaxAmount}
                 onChange={(e) => setFilterMaxAmount(e.target.value)}
-                className="h-10 rounded-sm border border-hairline bg-canvas px-2 text-sm text-ink placeholder:text-muted-soft focus:border-ink focus:outline-none"
+                className="h-11 rounded-sm border border-hairline bg-canvas px-2 text-base text-ink placeholder:text-muted-soft focus:border-ink focus:outline-none sm:h-10 sm:text-sm"
               />
             </div>
           </div>
@@ -404,12 +404,12 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                   key={p.id}
                   className={cn(isMyPurchase && "bg-primary/[0.04] border-l-2 border-l-primary")}
                 >
-                  <Td>{formatDate(p.date)}</Td>
-                  <Td className="font-medium text-ink">
+                  <Td label="Data">{formatDate(p.date)}</Td>
+                  <Td label="Descrição" className="font-medium text-ink">
                     {p.description ?? <span className="text-muted-soft">—</span>}
                   </Td>
-                  <Td>{CATEGORY_LABELS[p.category]}</Td>
-                  <Td>
+                  <Td label="Categoria">{CATEGORY_LABELS[p.category]}</Td>
+                  <Td label="Responsável">
                     <span className="flex items-center gap-1.5">
                       {p.responsible.name}
                       {isMyPurchase && (
@@ -419,16 +419,16 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
                       )}
                     </span>
                   </Td>
-                <Td>
+                <Td label="Adiantamento">
                   {p.chalet ? (
                     `Chalé ${p.chalet.number} — ${p.chalet.name}`
                   ) : (
                     <span className="text-muted-soft">—</span>
                   )}
                 </Td>
-                <Td className="text-right font-medium">{formatCents(p.amountCents)}</Td>
-                <Td>
-                  <div className="flex items-center gap-2">
+                <Td label="Valor" className="text-right font-medium">{formatCents(p.amountCents)}</Td>
+                <Td label="Comprovante">
+                  <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
                     {p.hasReceipt && (
                       <Button variant="ghost" size="xs" onClick={() => void openReceipt(p.id)}>
                         Ver
@@ -496,7 +496,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
           noValidate
         >
           {formError && <ErrorState message={formError} />}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="Data"
               type="date"
@@ -554,7 +554,7 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
           ) : (
             <ErrorState message="Você não possui chalé vinculado para lançar compras." />
           )}
-          <div className="flex justify-end gap-3">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Cancelar
             </Button>

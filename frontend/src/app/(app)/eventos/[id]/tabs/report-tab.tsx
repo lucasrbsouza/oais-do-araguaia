@@ -44,7 +44,7 @@ export function ReportTab({ eventId }: { eventId: string }) {
   return (
     <div className="space-y-6">
       {!IS_DEMO && (
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             variant="secondary"
             onClick={() => void handleExport("xlsx")}
@@ -105,15 +105,19 @@ export function ReportTab({ eventId }: { eventId: string }) {
               <tbody>
                 {data.purchasesByCategory.map((row) => (
                   <tr key={row.category}>
-                    <Td className="font-medium text-ink">{CATEGORY_LABELS[row.category]}</Td>
-                    <Td className="text-right">{row.count}</Td>
-                    <Td className="text-right">{formatCents(row.totalCents)}</Td>
+                    <Td label="Categoria" className="font-medium text-ink">
+                      {CATEGORY_LABELS[row.category]}
+                    </Td>
+                    <Td label="Itens" className="text-right">{row.count}</Td>
+                    <Td label="Total" className="text-right">{formatCents(row.totalCents)}</Td>
                   </tr>
                 ))}
                 <tr>
-                  <Td className="font-semibold text-ink">Total</Td>
-                  <Td />
-                  <Td className="text-right font-semibold text-ink">
+                  <Td label="Categoria" className="font-semibold text-ink">
+                    Total
+                  </Td>
+                  <Td className="hidden xl:table-cell" />
+                  <Td label="Total" className="text-right font-semibold text-ink">
                     {formatCents(data.totalCents)}
                   </Td>
                 </tr>
@@ -147,16 +151,22 @@ export function ReportTab({ eventId }: { eventId: string }) {
               <tbody>
                 {data.settlement.map((row) => (
                   <tr key={row.chaletNumber}>
-                    <Td className="font-medium text-ink">
+                    <Td label="Chalé" className="font-medium text-ink">
                       {row.chaletNumber} — {row.chaletName}
                     </Td>
-                    <Td>{row.ownerName ?? <span className="text-muted-soft">—</span>}</Td>
-                    <Td className="text-right">{formatCents(row.commonCents)}</Td>
-                    <Td className="text-right">{formatCents(row.alcoholCents)}</Td>
-                    <Td className="text-right font-semibold">{formatCents(row.totalCents)}</Td>
-                    <Td className="text-right">{formatCents(row.advanceCents)}</Td>
-                    <Td className="text-right">{formatCents(row.paidCents)}</Td>
-                    <Td>
+                    <Td label="Proprietário">
+                      {row.ownerName ?? <span className="text-muted-soft">—</span>}
+                    </Td>
+                    <Td label="Comum" className="text-right">{formatCents(row.commonCents)}</Td>
+                    <Td label="Álcool" className="text-right">{formatCents(row.alcoholCents)}</Td>
+                    <Td label="Total" className="text-right font-semibold">
+                      {formatCents(row.totalCents)}
+                    </Td>
+                    <Td label="Adiantado" className="text-right">
+                      {formatCents(row.advanceCents)}
+                    </Td>
+                    <Td label="Pago" className="text-right">{formatCents(row.paidCents)}</Td>
+                    <Td label="Status">
                       <PaymentStatusBadge status={row.paymentStatus} />
                     </Td>
                   </tr>

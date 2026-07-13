@@ -57,9 +57,9 @@ export default function DashboardPage() {
             {data.upcomingReservations.map((r) => (
               <div
                 key={r.id}
-                className="flex items-center justify-between border-b border-hairline-soft pb-3 last:border-0 last:pb-0"
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-hairline-soft pb-3 last:border-0 last:pb-0"
               >
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-ink">
                     Chalé {r.chaletNumber} — {r.chaletName}
                   </p>
@@ -81,7 +81,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link
                   href={`/eventos/${data.lastEvent.id}`}
                   className="font-medium text-ink underline-offset-4 hover:underline"

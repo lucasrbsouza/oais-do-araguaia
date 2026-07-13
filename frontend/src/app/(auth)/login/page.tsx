@@ -85,7 +85,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center p-4 overflow-hidden">
+    <main className="relative flex min-h-dvh items-center justify-center p-4 overflow-hidden">
       {/* Fundo decorativo inspirado no Airbnb */}
       <div className="fixed inset-0 -z-10 overflow-hidden bg-[#e8e7e3] flex flex-col justify-center gap-6 p-4">
         <div className="absolute inset-0 flex flex-col justify-center gap-6 pointer-events-none scale-105 select-none blur-[1.5px] opacity-95">
@@ -117,14 +117,14 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-[#e8e7e3]/5 backdrop-blur-[0.2px]" />
       </div>
 
-      <div className="w-full max-w-md rounded-md bg-canvas p-8 shadow-float z-10">
+      <div className="w-full max-w-md rounded-md bg-canvas p-6 shadow-float z-10 sm:p-8">
         <div className="flex items-center gap-3 mb-6">
           <img
             src={LOGO_SRC}
             alt="Logo Oasís do Araguaia"
-            className="size-12 object-contain"
+            className="size-12 shrink-0 object-contain"
           />
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-ink leading-tight">Oasís do Araguaia</h1>
             <p className="text-xs text-muted">
               Gestão do condomínio de chalés

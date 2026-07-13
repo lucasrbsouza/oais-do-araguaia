@@ -37,8 +37,9 @@ const FILTERABLE_ENTITIES = [
   "Report",
 ];
 
+// h-11/text-base no toque: abaixo de 16px o iOS dá zoom sozinho ao focar o campo.
 const selectClass =
-  "h-10 rounded-sm border border-hairline bg-canvas px-2 text-sm text-ink cursor-pointer";
+  "h-11 w-full rounded-sm border border-hairline bg-canvas px-2 text-base text-ink cursor-pointer sm:h-10 sm:text-sm";
 
 export default function AuditPage() {
   const { user } = useSession();
@@ -102,8 +103,8 @@ export default function AuditPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-md border border-hairline bg-canvas p-4">
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+      <div className="grid grid-cols-1 items-end gap-3 rounded-md border border-hairline bg-canvas p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
           Usuário
           <select
             value={userId}
@@ -119,7 +120,7 @@ export default function AuditPage() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
           Ação
           <select
             value={action}
@@ -139,7 +140,7 @@ export default function AuditPage() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
           Área
           <select
             value={entity}
@@ -155,7 +156,7 @@ export default function AuditPage() {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
           De
           <input
             type="date"
@@ -165,7 +166,7 @@ export default function AuditPage() {
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted">
           Até
           <input
             type="date"
@@ -239,8 +240,10 @@ export default function AuditPage() {
                     aria-label={`Ver detalhes: ${info.label}`}
                     className="cursor-pointer hover:bg-surface-soft focus:bg-surface-soft focus:outline-none"
                   >
-                    <Td className="whitespace-nowrap">{formatDateTime(log.createdAt)}</Td>
-                    <Td>
+                    <Td label="Data e hora" className="whitespace-nowrap">
+                      {formatDateTime(log.createdAt)}
+                    </Td>
+                    <Td label="Usuário">
                       {log.user ? (
                         <span className="block">
                           <span className="block font-medium text-ink">{log.user.name}</span>
@@ -250,14 +253,18 @@ export default function AuditPage() {
                         <span className="text-muted-soft">—</span>
                       )}
                     </Td>
-                    <Td>
+                    <Td label="Ação">
                       <Badge tone={info.tone}>{info.label}</Badge>
                     </Td>
-                    <Td>{entityLabel(log.entity)}</Td>
-                    <Td className="max-w-64 truncate text-xs text-muted" title={summary}>
+                    <Td label="Área">{entityLabel(log.entity)}</Td>
+                    <Td
+                      label="Detalhes"
+                      className="max-w-64 truncate text-xs text-muted"
+                      title={summary}
+                    >
                       {summary || "—"}
                     </Td>
-                    <Td className="text-muted-soft">
+                    <Td className="hidden text-muted-soft xl:table-cell">
                       <ChevronRight className="size-4" aria-hidden />
                     </Td>
                   </tr>
@@ -266,7 +273,7 @@ export default function AuditPage() {
             </tbody>
           </Table>
 
-          <div className="flex items-center justify-between text-sm text-muted">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
             <span>
               {data.total} registro{data.total === 1 ? "" : "s"}
             </span>

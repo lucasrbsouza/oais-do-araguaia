@@ -151,7 +151,7 @@ function AutoSettlementCard({ eventId }: { eventId: string }) {
                           setMinutes(e.target.value);
                           setSaved(false);
                         }}
-                        className="h-8 w-24 rounded-sm border border-hairline bg-canvas px-2 text-sm"
+                        className="h-11 w-24 rounded-sm border border-hairline bg-canvas px-2 text-base sm:h-8 sm:text-sm"
                       />
                       minutos
                     </span>
@@ -290,16 +290,16 @@ export function SettlementTab({
             <tbody>
               {data.items.map((item) => (
                 <tr key={item.chaletId}>
-                  <Td className="font-medium text-ink">
+                  <Td label="Chalé" className="font-medium text-ink">
                     {item.chaletNumber} — {item.chaletName}
                   </Td>
-                  <Td className="text-right">
+                  <Td label="Comum" className="text-right">
                     {formatCents(item.commonCents)}
                   </Td>
-                  <Td className="text-right">
+                  <Td label="Álcool" className="text-right">
                     {formatCents(item.alcoholCents)}
                   </Td>
-                  <Td className="text-right font-semibold text-ink">
+                  <Td label="Total" className="text-right font-semibold text-ink">
                     {formatCents(item.totalCents)}
                   </Td>
                 </tr>

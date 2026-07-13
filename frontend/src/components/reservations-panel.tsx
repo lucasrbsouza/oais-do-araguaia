@@ -153,10 +153,10 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
                     isMyReservation && "bg-primary/[0.04] border-l-2 border-l-primary"
                   )}
                 >
-                  <Td className="font-medium text-ink">
+                  <Td label="Chalé" className="font-medium text-ink">
                     {r.chalet.number} — {r.chalet.name}
                   </Td>
-                  <Td>
+                  <Td label="Responsável">
                     <span className="flex items-center gap-1.5">
                       {r.responsible.name}
                       {r.responsible.id === user?.id && (
@@ -166,19 +166,19 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
                       )}
                     </span>
                   </Td>
-                  <Td>
+                  <Td label="Período">
                     {formatDate(r.checkIn)} – {formatDate(r.checkOut)}
                   </Td>
-                  <Td>{r.adults}</Td>
-                  <Td>{r.children}</Td>
-                  <Td>{r.alcoholConsumers}</Td>
-                  <Td>
+                  <Td label="Adultos">{r.adults}</Td>
+                  <Td label="Crianças">{r.children}</Td>
+                  <Td label="Álcool">{r.alcoholConsumers}</Td>
+                  <Td label="Status">
                     <Badge tone={r.status === "ACTIVE" ? "success" : "neutral"}>
                       {r.status === "ACTIVE" ? "Ativa" : "Cancelada"}
                     </Badge>
                   </Td>
                   <Td>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1 xl:flex-nowrap">
                       {r.status === "ACTIVE" && eventOpen && isAdmin && (
                         <>
                           <Button

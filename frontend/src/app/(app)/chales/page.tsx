@@ -114,7 +114,7 @@ export default function ChaletsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Chalés</h1>
         {isAdmin && (
           <Button
@@ -176,9 +176,11 @@ export default function ChaletsPage() {
                     isMine && "bg-primary/[0.04] border-l-2 border-l-primary"
                   )}
                 >
-                  <Td className="font-semibold text-ink">{chalet.number}</Td>
-                  <Td>{chalet.name}</Td>
-                  <Td>
+                  <Td label="Nº" className="font-semibold text-ink">
+                    {chalet.number}
+                  </Td>
+                  <Td label="Nome">{chalet.name}</Td>
+                  <Td label="Proprietário">
                     {chalet.owner ? (
                       <span className="flex items-center gap-1.5">
                         {chalet.owner.name}
@@ -192,11 +194,11 @@ export default function ChaletsPage() {
                       <span className="text-muted-soft">Sem proprietário</span>
                     )}
                   </Td>
-              <Td>
+              <Td label="Status">
                 <ChaletStatusBadge status={chalet.status} />
               </Td>
               <Td>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1 xl:flex-nowrap">
                   {canEdit(chalet) && (
                     <Button
                       variant="ghost"
@@ -275,7 +277,7 @@ export default function ChaletsPage() {
                 </option>
               ))}
             </SelectField>
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="secondary" onClick={() => setCreate(null)}>
                 Cancelar
               </Button>
@@ -335,7 +337,7 @@ export default function ChaletsPage() {
                 </option>
               ))}
             </SelectField>
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="secondary" onClick={() => setEdit(null)}>
                 Cancelar
               </Button>

@@ -69,13 +69,13 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Calendário</h1>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="xs" aria-label="Mês anterior" onClick={() => setMonth(addMonths(month, -1))}>
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="min-w-40 text-center text-base font-semibold capitalize text-ink">
+          <span className="min-w-32 text-center text-base font-semibold capitalize text-ink sm:min-w-40">
             {format(month, "MMMM yyyy", { locale: ptBR })}
           </span>
           <Button variant="ghost" size="xs" aria-label="Próximo mês" onClick={() => setMonth(addMonths(month, 1))}>
@@ -88,15 +88,15 @@ export default function CalendarPage() {
       {isLoading ? (
         <Skeleton className="h-96" />
       ) : (
-        <Card className="p-3 md:p-4">
-          <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-muted">
+        <Card className="p-2 sm:p-3 md:p-4">
+          <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] font-semibold uppercase text-muted sm:gap-1 sm:text-xs">
             {WEEKDAYS.map((d) => (
               <div key={d} className="py-2">
                 {d}
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {Array.from({ length: leadingBlanks }).map((_, i) => (
               <div key={`blank-${i}`} />
             ))}
@@ -111,18 +111,18 @@ export default function CalendarPage() {
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    "min-h-20 rounded-sm border border-hairline-soft p-1.5 cursor-pointer hover:border-primary/40 hover:bg-surface-soft transition-all",
+                    "min-h-16 rounded-sm border border-hairline-soft p-1 cursor-pointer hover:border-primary/40 hover:bg-surface-soft transition-all sm:min-h-20 sm:p-1.5",
                     occupied && "border-primary/40 bg-primary/5 hover:bg-primary/10",
                   )}
                 >
                   <span className="text-xs font-medium text-body">{format(day, "d")}</span>
                   {occupied && (
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <div className="mt-1 flex flex-wrap gap-0.5 sm:gap-1">
                       {chalets.map((n) => (
                         <span
                           key={n}
                           title={`Chalé ${n}`}
-                          className="inline-flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white"
+                          className="inline-flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white sm:size-5 sm:text-[10px]"
                         >
                           {n}
                         </span>
@@ -156,7 +156,7 @@ export default function CalendarPage() {
                 <div className="divide-y divide-hairline max-h-96 overflow-y-auto pr-1">
                   {paginatedReservations.map((r) => (
                     <div key={r.id} className="py-3 first:pt-0 last:pb-0 space-y-1">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="font-semibold text-ink">
                           Chalé {r.chalet.number} — {r.chalet.name}
                         </span>
@@ -171,7 +171,7 @@ export default function CalendarPage() {
                       <p className="text-xs text-muted">
                         Período: {formatDate(r.checkIn)} até {formatDate(r.checkOut)}
                       </p>
-                      <div className="flex gap-4 text-xs text-muted mt-1 bg-surface-soft p-2 rounded-xs">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted mt-1 bg-surface-soft p-2 rounded-xs">
                         <span>Adultos: <strong className="text-ink">{r.adults}</strong></span>
                         <span>Crianças: <strong className="text-ink">{r.children}</strong></span>
                         <span>Álcool: <strong className="text-ink">{r.alcoholConsumers}</strong></span>

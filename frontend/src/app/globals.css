@@ -35,4 +35,75 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  /* E-mails e códigos longos quebram em vez de alargar a página no celular. */
+  overflow-wrap: break-word;
+}
+
+/*
+ * Tabelas viram cartões empilhados abaixo de 1280px (celular e tablet, de pé
+ * ou deitado): a linha vira um cartão e cada célula um par rótulo/valor, sem
+ * rolagem horizontal. O rótulo vem do data-label que <Td> escreve; célula sem
+ * rótulo (a das ações) ocupa a largura toda.
+ *
+ * O corte é 1280 e não 1024 porque as tabelas maiores (Pagamentos, 9 colunas)
+ * só cabem inteiras a partir daí — no iPad deitado elas ficavam cortadas.
+ *
+ * As regras da <tr> ficam em :where() — especificidade zero — para as classes
+ * do Tailwind na linha (destaque de "meu chalé", hover) continuarem vencendo.
+ */
+@media (width < 80rem) {
+  :where(table[data-stacked]),
+  :where(table[data-stacked] tbody) {
+    display: block;
+  }
+
+  table[data-stacked] thead {
+    display: none;
+  }
+
+  :where(table[data-stacked] tbody tr) {
+    display: block;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    background: var(--color-canvas);
+    padding: 0.25rem 1rem;
+  }
+
+  :where(table[data-stacked] tbody tr:last-child) {
+    margin-bottom: 0;
+  }
+
+  table[data-stacked] td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    max-width: none;
+    padding: 0.625rem 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+  table[data-stacked] td[data-label] {
+    grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    align-items: center;
+    justify-items: end;
+    text-align: right;
+  }
+
+  table[data-stacked] td[data-label]::before {
+    content: attr(data-label);
+    justify-self: start;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  table[data-stacked] td:last-child {
+    border-bottom-width: 0;
+  }
 }

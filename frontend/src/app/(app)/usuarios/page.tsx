@@ -115,7 +115,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Usuários</h1>
         {isAdmin && <Button onClick={() => setOpen(true)}>Novo usuário</Button>}
       </div>
@@ -127,7 +127,7 @@ export default function UsersPage() {
           <tr>
             <Th>Nome</Th>
             <Th>E-mail</Th>
-            <Th className="hidden lg:table-cell">Telefone</Th>
+            <Th>Telefone</Th>
             <Th>Perfil</Th>
             <Th>Situação</Th>
             {isAdmin && <Th className="w-44">Ações</Th>}
@@ -144,7 +144,7 @@ export default function UsersPage() {
                 isMe && "bg-primary/[0.04] border-l-2 border-l-primary",
               )}
             >
-              <Td>
+              <Td label="Nome">
                 <Link
                   href={isMe ? "/perfil" : `/usuarios/${u.id}`}
                   className="flex items-center gap-2.5 font-medium text-ink hover:text-primary transition-colors"
@@ -158,17 +158,17 @@ export default function UsersPage() {
                   )}
                 </Link>
               </Td>
-              <Td>{u.email}</Td>
-              <Td className="hidden lg:table-cell text-muted">{u.phone || "—"}</Td>
-              <Td>{u.role === "ADMIN" ? "Administrador" : "Proprietário"}</Td>
-              <Td>
+              <Td label="E-mail">{u.email}</Td>
+              <Td label="Telefone" className="text-muted">{u.phone || "—"}</Td>
+              <Td label="Perfil">{u.role === "ADMIN" ? "Administrador" : "Proprietário"}</Td>
+              <Td label="Situação">
                 <Badge tone={u.active ? "success" : "neutral"}>
                   {u.active ? "Ativo" : "Inativo"}
                 </Badge>
               </Td>
               {isAdmin && (
                 <Td>
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1 xl:flex-nowrap">
                     <Button
                       variant="ghost"
                       size="xs"
@@ -247,7 +247,7 @@ export default function UsersPage() {
                 na tela de Chalés.
               </p>
             )}
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
