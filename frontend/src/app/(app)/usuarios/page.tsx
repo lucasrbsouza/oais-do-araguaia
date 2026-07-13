@@ -8,7 +8,7 @@ import { z } from "zod";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { UserItem } from "@/lib/types";
+import type { Chalet, UserItem } from "@/lib/types";
 import { useSession } from "@/stores/session";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,8 @@ const schema = z.object({
   password: z.string().min(8, "Mínimo de 8 caracteres."),
   role: z.enum(["ADMIN", "OWNER"]),
   phone: z.string().max(20, "Máximo 20 caracteres.").optional().or(z.literal("")),
+  /** Vínculo opcional: chalé ainda sem proprietário, atribuído ao novo usuário. */
+  chaletId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -42,19 +44,52 @@ export default function UsersPage() {
     queryFn: () => api<UserItem[]>("/users"),
   });
 
+  const { data: chalets } = useQuery({
+    queryKey: ["chalets"],
+    queryFn: () => api<Chalet[]>("/chalets"),
+    enabled: isAdmin,
+  });
+
+  // Só faz sentido oferecer chalé que ainda não tem dono.
+  const availableChalets = chalets?.filter((c) => c.owner === null) ?? [];
+
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { role: "OWNER" },
+    defaultValues: { role: "OWNER", chaletId: "" },
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: FormData) => api<UserItem>("/users", { method: "POST", body: data }),
+    mutationFn: async ({ chaletId, ...data }: FormData) => {
+      const created = await api<UserItem>("/users", { method: "POST", body: data });
+      if (chaletId) {
+        // Dois passos porque o vínculo é do chalé: se falhar, o usuário já existe
+        // e o admin refaz o vínculo pela tela de chalés — daí a mensagem abaixo.
+        try {
+          await api<Chalet>(`/chalets/${chaletId}`, {
+            method: "PATCH",
+            body: { ownerId: created.id },
+          });
+        } catch (err) {
+          throw new Error(
+            `Usuário criado, mas o chalé não pôde ser vinculado: ${(err as Error).message} ` +
+              "Vincule pela tela de Chalés.",
+          );
+        }
+      }
+      return created;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["users"] });
+      void queryClient.invalidateQueries({ queryKey: ["chalets"] });
       setOpen(false);
-      form.reset({ role: "OWNER", phone: "" });
+      form.reset({ role: "OWNER", phone: "", chaletId: "" });
     },
-    onError: (err: Error) => setFormError(err.message),
+    onError: (err: Error) => {
+      // O usuário pode ter sido criado mesmo com erro no vínculo do chalé.
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
+      void queryClient.invalidateQueries({ queryKey: ["chalets"] });
+      setFormError(err.message);
+    },
   });
 
   const toggleActive = useMutation({
@@ -197,6 +232,21 @@ export default function UsersPage() {
               error={form.formState.errors.phone?.message}
               {...form.register("phone")}
             />
+            {availableChalets.length > 0 ? (
+              <SelectField label="Chalé (opcional)" {...form.register("chaletId")}>
+                <option value="">Nenhum por enquanto</option>
+                {availableChalets.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.number} — {c.name}
+                  </option>
+                ))}
+              </SelectField>
+            ) : (
+              <p className="text-xs text-muted">
+                Nenhum chalé sem proprietário no momento. O vínculo pode ser feito depois,
+                na tela de Chalés.
+              </p>
+            )}
             <div className="flex justify-end gap-3">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancelar
