@@ -225,7 +225,7 @@ export function ReservationForm({ defaultEventId, reservation, onDone }: Reserva
         return (
           <fieldset
             key={field.id}
-            className="space-y-4 rounded-md border border-hairline bg-surface-soft/50 p-3"
+            className="space-y-4 rounded-md border border-hairline bg-surface-soft/50 p-2 sm:p-3"
           >
             {!isEdit && (
               <div className="flex items-center justify-between gap-2">
@@ -250,7 +250,7 @@ export function ReservationForm({ defaultEventId, reservation, onDone }: Reserva
                 )}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <Field
                 label="Entrada"
                 type="date"
@@ -264,7 +264,9 @@ export function ReservationForm({ defaultEventId, reservation, onDone }: Reserva
                 {...form.register(`stays.${index}.checkOut`)}
               />
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+            {/* items-end: no celular os rótulos longos quebram em duas linhas e
+                desalinhariam os campos; alinhar pela base mantém a linha reta. */}
+            <div className="grid grid-cols-3 items-end gap-2 sm:gap-4">
               <Field
                 label="Adultos (8+)"
                 type="number"

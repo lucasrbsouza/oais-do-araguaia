@@ -135,10 +135,12 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
               <Th>Chalé</Th>
               <Th>Responsável</Th>
               <Th>Período</Th>
-              <Th>Diárias</Th>
-              <Th>Adultos</Th>
-              <Th>Crianças</Th>
-              <Th>Álcool</Th>
+              {/* Colunas numéricas com padding menor: sem isso as 8 colunas
+                  estouram o container em notebooks de 1280px. */}
+              <Th className="xl:px-2">Diárias</Th>
+              <Th className="xl:px-2">Adultos</Th>
+              <Th className="xl:px-2">Crianças</Th>
+              <Th className="xl:px-2">Álcool</Th>
               <Th>Status</Th>
               <Th className="w-36">Ações</Th>
             </tr>
@@ -170,10 +172,18 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
                   <Td label="Período">
                     {formatDate(r.checkIn)} – {formatDate(r.checkOut)}
                   </Td>
-                  <Td label="Diárias">{nightsBetween(r.checkIn, r.checkOut)}</Td>
-                  <Td label="Adultos">{r.adults}</Td>
-                  <Td label="Crianças">{r.children}</Td>
-                  <Td label="Álcool">{r.alcoholConsumers}</Td>
+                  <Td label="Diárias" className="xl:px-2">
+                    {nightsBetween(r.checkIn, r.checkOut)}
+                  </Td>
+                  <Td label="Adultos" className="xl:px-2">
+                    {r.adults}
+                  </Td>
+                  <Td label="Crianças" className="xl:px-2">
+                    {r.children}
+                  </Td>
+                  <Td label="Álcool" className="xl:px-2">
+                    {r.alcoholConsumers}
+                  </Td>
                   <Td label="Status">
                     <Badge tone={r.status === "ACTIVE" ? "success" : "neutral"}>
                       {r.status === "ACTIVE" ? "Ativa" : "Cancelada"}
