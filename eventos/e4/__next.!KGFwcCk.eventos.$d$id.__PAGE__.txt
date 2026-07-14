@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:"$Sreact.suspense"
+3:I[73681,["/oais-do-araguaia/_next/static/chunks/1lype9rw864z5.js","/oais-do-araguaia/_next/static/chunks/09v_9-g8jef7w.js","/oais-do-araguaia/_next/static/chunks/09hczn2szhsvc.js","/oais-do-araguaia/_next/static/chunks/3gu0er7ya7dla.js","/oais-do-araguaia/_next/static/chunks/2qsw-m5s5_4gx.js","/oais-do-araguaia/_next/static/chunks/3xtv4k759rl6h.js","/oais-do-araguaia/_next/static/chunks/3p7p1fnnjvmg0.js"],"default"]
+4:I[99156,["/oais-do-araguaia/_next/static/chunks/1lype9rw864z5.js","/oais-do-araguaia/_next/static/chunks/09v_9-g8jef7w.js"],"OutletBoundary"]
+0:{"rsc":["$","$1","c",{"children":[["$","$2",null,{"fallback":null,"children":["$","$L3",null,{}]}],[["$","script","script-0",{"src":"/oais-do-araguaia/_next/static/chunks/3xtv4k759rl6h.js","async":true}],["$","script","script-1",{"src":"/oais-do-araguaia/_next/static/chunks/3p7p1fnnjvmg0.js","async":true}]],["$","$L4",null,{"children":["$","$2",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"mNmCWEY3Vgv--QXaKGTPq"}
+5:null
