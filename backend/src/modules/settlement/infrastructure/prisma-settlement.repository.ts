@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PurchaseCategory } from '@prisma/client';
+import { nightsOf } from '../../../shared/domain/stay';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
 import { SettlementShare } from '../domain/expense-sharing.strategy';
 import {
@@ -39,11 +40,12 @@ export class PrismaSettlementRepository implements SettlementRepository {
     return {
       eventId: event.id,
       eventStatus: event.status,
-      occupancies: event.reservations.map((r) => ({
+      stays: event.reservations.map((r) => ({
         chaletId: r.chaletId,
         adults: r.adults,
         children: r.children,
         alcoholConsumers: r.alcoholConsumers,
+        nights: nightsOf(r),
       })),
       commonTotalCents,
       alcoholTotalCents,

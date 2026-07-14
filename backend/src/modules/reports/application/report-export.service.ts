@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import PDFDocument from 'pdfkit';
 import { NotFoundError } from '../../../shared/domain/domain-error';
+import { nightsOf } from '../../../shared/domain/stay';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
 import {
   ADULT_WEIGHT,
@@ -41,6 +42,16 @@ interface PurchaseRow {
   amountCents: number;
 }
 
+/** Soma de todas as entradas de um chalé no evento. */
+interface ChaletStayTotals {
+  adults: number;
+  children: number;
+  alcoholConsumers: number;
+  nights: number;
+  guestWeight: number;
+  alcoholWeight: number;
+}
+
 interface ChaletShareRow {
   chaletName: string;
   ownerName: string | null;
@@ -67,7 +78,7 @@ interface EventExportData {
   commonTotalCents: number;
   alcoholTotalCents: number;
   guestWeight: number;
-  totalAlcoholConsumers: number;
+  alcoholWeight: number;
   commonPerWeightCents: number;
   alcoholPerConsumerCents: number;
   shares: ChaletShareRow[];
@@ -193,9 +204,28 @@ export class ReportExportService {
       .reduce((sum, p) => sum + p.amountCents, 0);
     const commonTotalCents = purchasesTotalCents - alcoholTotalCents;
 
-    const reservationByChalet = new Map(
-      event.reservations.map((r) => [r.chaletId, r]),
-    );
+    // Um chalé pode ter várias entradas (3 suítes, estadias de durações
+    // diferentes): o relatório soma todas na linha do chalé.
+    const stayByChalet = new Map<string, ChaletStayTotals>();
+    for (const r of event.reservations) {
+      const totals = stayByChalet.get(r.chaletId) ?? {
+        adults: 0,
+        children: 0,
+        alcoholConsumers: 0,
+        nights: 0,
+        guestWeight: 0,
+        alcoholWeight: 0,
+      };
+      const nights = nightsOf(r);
+      totals.adults += r.adults;
+      totals.children += r.children;
+      totals.alcoholConsumers += r.alcoholConsumers;
+      totals.nights += nights;
+      totals.guestWeight +=
+        (r.adults * ADULT_WEIGHT + r.children * CHILD_WEIGHT) * nights;
+      totals.alcoholWeight += r.alcoholConsumers * nights;
+      stayByChalet.set(r.chaletId, totals);
+    }
     const paidByChalet = new Map<string, number>();
     for (const payment of event.payments) {
       paidByChalet.set(
@@ -213,38 +243,28 @@ export class ReportExportService {
       }
     }
 
-    // Pesos em base 10 (adulto 1.0, criança 0.5), como no rateio oficial.
-    const guestWeight = event.reservations.reduce(
-      (sum, r) => sum + r.adults * ADULT_WEIGHT + r.children * CHILD_WEIGHT,
+    // Pesos em pessoa-diária, como no rateio oficial.
+    const guestWeight = [...stayByChalet.values()].reduce(
+      (sum, s) => sum + s.guestWeight,
       0,
     );
-    const totalAlcoholConsumers = event.reservations.reduce(
-      (sum, r) => sum + r.alcoholConsumers,
+    const alcoholWeight = [...stayByChalet.values()].reduce(
+      (sum, s) => sum + s.alcoholWeight,
       0,
     );
 
     const shares: ChaletShareRow[] = (event.settlement?.items ?? []).map(
       (item) => {
-        const reservation = reservationByChalet.get(item.chaletId);
-        const nights = reservation
-          ? Math.max(
-              0,
-              Math.round(
-                (reservation.checkOut.getTime() -
-                  reservation.checkIn.getTime()) /
-                  86_400_000,
-              ),
-            )
-          : 0;
+        const stay = stayByChalet.get(item.chaletId);
         const paidCents = paidByChalet.get(item.chaletId) ?? 0;
         const advanceCents = advanceByChalet.get(item.chaletId) ?? 0;
         return {
           chaletName: item.chalet.name,
           ownerName: item.chalet.owner?.name ?? null,
-          adults: reservation?.adults ?? 0,
-          children: reservation?.children ?? 0,
-          alcoholConsumers: reservation?.alcoholConsumers ?? 0,
-          nights,
+          adults: stay?.adults ?? 0,
+          children: stay?.children ?? 0,
+          alcoholConsumers: stay?.alcoholConsumers ?? 0,
+          nights: stay?.nights ?? 0,
           commonCents: item.commonCents,
           alcoholCents: item.alcoholCents,
           totalCents: item.totalCents,
@@ -269,15 +289,13 @@ export class ReportExportService {
       commonTotalCents,
       alcoholTotalCents,
       guestWeight,
-      totalAlcoholConsumers,
+      alcoholWeight,
       commonPerWeightCents:
         guestWeight > 0
           ? Math.round(commonTotalCents / (guestWeight / ADULT_WEIGHT))
           : 0,
       alcoholPerConsumerCents:
-        totalAlcoholConsumers > 0
-          ? Math.round(alcoholTotalCents / totalAlcoholConsumers)
-          : 0,
+        alcoholWeight > 0 ? Math.round(alcoholTotalCents / alcoholWeight) : 0,
       shares,
       hasSettlement: event.settlement !== null,
     };
@@ -377,8 +395,8 @@ export class ReportExportService {
       ['Alimentação e despesas comuns', data.commonTotalCents],
       ['Bebidas alcoólicas', data.alcoholTotalCents],
       ['TOTAL GERAL', data.purchasesTotalCents],
-      ['Custo comum por pessoa (adulto)', data.commonPerWeightCents],
-      ['Custo de bebida por consumidor', data.alcoholPerConsumerCents],
+      ['Custo comum por adulto/diária', data.commonPerWeightCents],
+      ['Custo de bebida por consumidor/diária', data.alcoholPerConsumerCents],
     ];
     for (const [label, cents] of consolidated) {
       const row = sheet.addRow([label, '', '', '', toReais(cents)]);
@@ -642,11 +660,11 @@ export class ReportExportService {
           ['Bebidas alcoólicas', formatMoney(data.alcoholTotalCents)],
           ['TOTAL GERAL', formatMoney(data.purchasesTotalCents)],
           [
-            'Custo comum por pessoa (adulto)',
+            'Custo comum por adulto/diária',
             formatMoney(data.commonPerWeightCents),
           ],
           [
-            'Custo de bebida por consumidor',
+            'Custo de bebida por consumidor/diária',
             formatMoney(data.alcoholPerConsumerCents),
           ],
         ],

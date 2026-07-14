@@ -52,8 +52,8 @@ const makeSettlementRepo = (): SettlementRepository => ({
   getCalculationInput: jest.fn().mockResolvedValue({
     eventId: 'e1',
     eventStatus: 'OPEN',
-    occupancies: [
-      { chaletId: 'c1', adults: 1, children: 0, alcoholConsumers: 0 },
+    stays: [
+      { chaletId: 'c1', adults: 1, children: 0, alcoholConsumers: 0, nights: 1 },
     ],
     commonTotalCents: 500,
     alcoholTotalCents: 0,

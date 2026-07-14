@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/format";
+import { formatDate, nightsBetween } from "@/lib/format";
 import type { Reservation } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -135,6 +135,7 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
               <Th>Chalé</Th>
               <Th>Responsável</Th>
               <Th>Período</Th>
+              <Th>Diárias</Th>
               <Th>Adultos</Th>
               <Th>Crianças</Th>
               <Th>Álcool</Th>
@@ -169,6 +170,7 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
                   <Td label="Período">
                     {formatDate(r.checkIn)} – {formatDate(r.checkOut)}
                   </Td>
+                  <Td label="Diárias">{nightsBetween(r.checkIn, r.checkOut)}</Td>
                   <Td label="Adultos">{r.adults}</Td>
                   <Td label="Crianças">{r.children}</Td>
                   <Td label="Álcool">{r.alcoholConsumers}</Td>

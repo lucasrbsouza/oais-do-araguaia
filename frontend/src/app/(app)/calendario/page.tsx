@@ -40,15 +40,20 @@ export default function CalendarPage() {
   const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
   const leadingBlanks = getDay(startOfMonth(month));
 
+  // Um chalé pode ter várias entradas no mesmo dia (3 suítes): o calendário
+  // mostra o número dele uma vez só.
   const chaletsOn = (day: Date): number[] =>
-    (reservations ?? [])
-      .filter(
-        (r) =>
-          r.status === "ACTIVE" &&
-          isWithinInterval(day, { start: parseISO(r.checkIn), end: parseISO(r.checkOut) }),
-      )
-      .map((r) => r.chalet.number)
-      .sort((a, b) => a - b);
+    [
+      ...new Set(
+        (reservations ?? [])
+          .filter(
+            (r) =>
+              r.status === "ACTIVE" &&
+              isWithinInterval(day, { start: parseISO(r.checkIn), end: parseISO(r.checkOut) }),
+          )
+          .map((r) => r.chalet.number),
+      ),
+    ].sort((a, b) => a - b);
 
   const reservationsForDay = (day: Date): Reservation[] => {
     if (!reservations) return [];

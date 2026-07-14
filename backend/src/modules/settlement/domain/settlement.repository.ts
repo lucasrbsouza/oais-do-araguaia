@@ -1,10 +1,10 @@
 import { EventStatus, SettlementAutoMode } from '@prisma/client';
-import { ChaletOccupancy, SettlementShare } from './expense-sharing.strategy';
+import { ChaletStay, SettlementShare } from './expense-sharing.strategy';
 
 export interface SettlementCalculationInput {
   eventId: string;
   eventStatus: EventStatus;
-  occupancies: ChaletOccupancy[];
+  stays: ChaletStay[];
   commonTotalCents: number;
   alcoholTotalCents: number;
 }

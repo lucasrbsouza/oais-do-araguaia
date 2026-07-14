@@ -38,10 +38,11 @@ export interface ListReservationsFilter {
 
 export abstract class ReservationRepository {
   abstract findById(id: string): Promise<ReservationDetail | null>;
-  abstract findActiveByEventAndChalet(
+  /** Entradas ativas do chalé no evento — um chalé pode receber várias. */
+  abstract listActiveByEventAndChalet(
     eventId: string,
     chaletId: string,
-  ): Promise<Reservation | null>;
+  ): Promise<Reservation[]>;
   abstract create(data: CreateReservationData): Promise<ReservationDetail>;
   abstract update(
     id: string,

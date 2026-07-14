@@ -26,8 +26,8 @@ const makeRepo = (
   getCalculationInput: jest.fn().mockResolvedValue({
     eventId: 'e1',
     eventStatus: 'OPEN',
-    occupancies: [
-      { chaletId: 'c1', adults: 2, children: 0, alcoholConsumers: 0 },
+    stays: [
+      { chaletId: 'c1', adults: 2, children: 0, alcoholConsumers: 0, nights: 1 },
     ],
     commonTotalCents: 1000,
     alcoholTotalCents: 0,
@@ -81,7 +81,7 @@ describe('CalculateSettlementUseCase', () => {
       getCalculationInput: jest.fn().mockResolvedValue({
         eventId: 'e1',
         eventStatus: 'CLOSED',
-        occupancies: [],
+        stays: [],
         commonTotalCents: 0,
         alcoholTotalCents: 0,
       }),

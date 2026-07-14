@@ -108,12 +108,14 @@ describe('Fluxo do final de semana (e2e)', () => {
       adults: number,
       children: number,
       alcohol: number,
+      checkIn = '2030-01-04',
+      checkOut = '2030-01-06',
     ) =>
       request(app.getHttpServer()).post('/api/reservations').set(auth()).send({
         eventId,
         chaletId,
-        checkIn: '2030-01-04',
-        checkOut: '2030-01-06',
+        checkIn,
+        checkOut,
         adults,
         children,
         alcoholConsumers: alcohol,
@@ -122,8 +124,36 @@ describe('Fluxo do final de semana (e2e)', () => {
     await make(chaletIds[0], 2, 2, 2).expect(201);
     await make(chaletIds[1], 3, 0, 0).expect(201);
     await make(chaletIds[2], 1, 1, 1).expect(201);
-    // chalé já reservado neste evento
-    await make(chaletIds[0], 1, 0, 0).expect(409);
+    // Mesmo chalé recebe outras entradas: são 3 suítes, e as estadias têm
+    // durações diferentes (esta fica só 1 diária).
+    await make(chaletIds[0], 2, 0, 1, '2030-01-05').expect(201);
+    await make(chaletIds[0], 1, 0, 0).expect(201);
+    // 4ª entrada simultânea: as 3 suítes já estão ocupadas.
+    await make(chaletIds[0], 1, 0, 0, '2030-01-05').expect(409);
+  });
+
+  it('aceita entrada em sequência mesmo com as suítes lotadas', async () => {
+    // As 3 entradas do chalé 0 terminam em 06/01; quem entra em 06/01 não
+    // disputa suíte com elas.
+    await request(app.getHttpServer())
+      .post('/api/reservations')
+      .set(auth())
+      .send({
+        eventId,
+        chaletId: chaletIds[0],
+        checkIn: '2030-01-06',
+        checkOut: '2030-01-06',
+        adults: 1,
+        children: 0,
+        alcoholConsumers: 0,
+      })
+      .expect(201)
+      .then((res) =>
+        request(app.getHttpServer())
+          .delete(`/api/reservations/${res.body.id}`)
+          .set(auth())
+          .expect(204),
+      );
   });
 
   it('rejeita reserva fora do período do evento', async () => {
@@ -179,6 +209,22 @@ describe('Fluxo do final de semana (e2e)', () => {
       (i: { chaletId: string }) => i.chaletId === chaletIds[1],
     );
     expect(noAlcohol.alcoholCents).toBe(0);
+
+    // As 3 entradas do chalé 0 somam numa cota única — o rateio tem um item
+    // por chalé, não por entrada.
+    expect(items).toHaveLength(3);
+
+    // Pesos em pessoa-diária: chalé 0 = (2a+2c)×2 + (2a)×1 + (1a)×2 = 100,
+    // chalé 1 = (3a)×2 = 60, chalé 2 = (1a+1c)×2 = 30.
+    const byChalet = (id: string) =>
+      items.find((i: { chaletId: string }) => i.chaletId === id);
+    expect(byChalet(chaletIds[0]).commonCents).toBe(45264);
+    expect(byChalet(chaletIds[1]).commonCents).toBe(27158);
+    expect(byChalet(chaletIds[2]).commonCents).toBe(13579);
+
+    // Álcool em consumidor-diária: 2×2 + 1×1 = 5, 0, 1×2 = 2.
+    expect(byChalet(chaletIds[0]).alcoholCents).toBe(15000);
+    expect(byChalet(chaletIds[2]).alcoholCents).toBe(6000);
   });
 
   it('fecha o evento e congela alterações', async () => {
@@ -235,10 +281,12 @@ describe('Fluxo do final de semana (e2e)', () => {
       .set(auth())
       .expect(200);
 
+    // Soma as 5 entradas: 2+3+1 adultos das primeiras, mais 2 e 1 das outras
+    // duas entradas do chalé 0.
     expect(res.body.guests).toEqual({
-      adults: 6,
+      adults: 9,
       children: 3,
-      alcoholConsumers: 3,
+      alcoholConsumers: 4,
     });
     expect(res.body.totalCents).toBe(107001);
     expect(res.body.settlement).toHaveLength(3);

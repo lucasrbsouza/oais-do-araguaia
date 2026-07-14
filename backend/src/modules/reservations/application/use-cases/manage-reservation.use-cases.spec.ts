@@ -60,11 +60,20 @@ const reservation = {
   responsible: { id: 'owner', name: 'Owner' },
 } as unknown as ReservationDetail;
 
+/** Entrada ativa já existente no chalé, usada para lotar as suítes nos testes. */
+const activeStay = (id: string, checkIn: string, checkOut: string) =>
+  ({
+    ...reservation,
+    id,
+    checkIn: new Date(checkIn),
+    checkOut: new Date(checkOut),
+  }) as unknown as ReservationDetail;
+
 const makeReservationRepo = (
   overrides: Partial<ReservationRepository> = {},
 ): ReservationRepository => ({
   findById: jest.fn().mockResolvedValue(reservation),
-  findActiveByEventAndChalet: jest.fn().mockResolvedValue(null),
+  listActiveByEventAndChalet: jest.fn().mockResolvedValue([]),
   create: jest.fn().mockResolvedValue(reservation),
   update: jest.fn().mockResolvedValue(reservation),
   delete: jest.fn().mockResolvedValue(undefined),
@@ -133,9 +142,30 @@ describe('CreateReservationUseCase', () => {
     );
   });
 
-  it('bloqueia segunda reserva do mesmo chalé no evento', async () => {
+  it('aceita outra entrada no chalé que já tem reserva no evento', async () => {
     const repo = makeReservationRepo({
-      findActiveByEventAndChalet: jest.fn().mockResolvedValue(reservation),
+      listActiveByEventAndChalet: jest
+        .fn()
+        .mockResolvedValue([activeStay('r1', '2030-01-04', '2030-01-06')]),
+    });
+    const useCase = new CreateReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo(),
+    );
+    await useCase.execute(validInput, owner);
+    expect(repo.create).toHaveBeenCalled();
+  });
+
+  it('bloqueia a 4ª entrada simultânea: só há 3 suítes', async () => {
+    const repo = makeReservationRepo({
+      listActiveByEventAndChalet: jest
+        .fn()
+        .mockResolvedValue([
+          activeStay('r1', '2030-01-04', '2030-01-06'),
+          activeStay('r2', '2030-01-04', '2030-01-06'),
+          activeStay('r3', '2030-01-05', '2030-01-06'),
+        ]),
     });
     const useCase = new CreateReservationUseCase(
       repo,
@@ -145,6 +175,28 @@ describe('CreateReservationUseCase', () => {
     await expect(useCase.execute(validInput, owner)).rejects.toThrow(
       ConflictError,
     );
+  });
+
+  it('aceita entrada em sequência: quem sai libera a suíte no mesmo dia', async () => {
+    const repo = makeReservationRepo({
+      listActiveByEventAndChalet: jest
+        .fn()
+        .mockResolvedValue([
+          activeStay('r1', '2030-01-04', '2030-01-05'),
+          activeStay('r2', '2030-01-04', '2030-01-05'),
+          activeStay('r3', '2030-01-04', '2030-01-05'),
+        ]),
+    });
+    const useCase = new CreateReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo(),
+    );
+    await useCase.execute(
+      { ...validInput, checkIn: new Date('2030-01-05') },
+      owner,
+    );
+    expect(repo.create).toHaveBeenCalled();
   });
 
   it('bloqueia reserva em evento encerrado', async () => {
@@ -203,6 +255,42 @@ describe('UpdateReservationUseCase', () => {
     await expect(
       useCase.execute({ id: 'r1', adults: 3 }, owner),
     ).rejects.toThrow(ForbiddenError);
+  });
+
+  it('a própria reserva não conta contra o limite de suítes ao editar', async () => {
+    const repo = makeReservationRepo({
+      listActiveByEventAndChalet: jest
+        .fn()
+        .mockResolvedValue([
+          activeStay('r1', '2030-01-04', '2030-01-06'),
+          activeStay('r2', '2030-01-04', '2030-01-06'),
+          activeStay('r3', '2030-01-04', '2030-01-06'),
+        ]),
+    });
+    const useCase = new UpdateReservationUseCase(repo, makeEventRepo());
+    await useCase.execute({ id: 'r1', adults: 3 }, admin);
+    expect(repo.update).toHaveBeenCalled();
+  });
+
+  it('bloqueia edição que lota as suítes num período já cheio', async () => {
+    const repo = makeReservationRepo({
+      listActiveByEventAndChalet: jest
+        .fn()
+        .mockResolvedValue([
+          activeStay('r1', '2030-01-04', '2030-01-05'),
+          activeStay('r2', '2030-01-05', '2030-01-06'),
+          activeStay('r3', '2030-01-05', '2030-01-06'),
+          activeStay('r4', '2030-01-05', '2030-01-06'),
+        ]),
+    });
+    const useCase = new UpdateReservationUseCase(repo, makeEventRepo());
+    // r1 sai de 04–05 (livre) e tenta ir para 05–06, onde já há 3 entradas.
+    await expect(
+      useCase.execute(
+        { id: 'r1', checkIn: new Date('2030-01-05') },
+        admin,
+      ),
+    ).rejects.toThrow(ConflictError);
   });
 });
 

@@ -4,15 +4,18 @@ import { Money } from '../../../shared/domain/money';
 export const ADULT_WEIGHT = 10;
 export const CHILD_WEIGHT = 5;
 
-export interface ChaletOccupancy {
+/** Uma entrada (check-in/check-out) de um chalé. O chalé pode ter várias. */
+export interface ChaletStay {
   chaletId: string;
   adults: number;
   children: number;
   alcoholConsumers: number;
+  /** Diárias da entrada; bate-volta conta 1. */
+  nights: number;
 }
 
 export interface SettlementInput {
-  occupancies: ChaletOccupancy[];
+  stays: ChaletStay[];
   commonTotal: Money;
   alcoholTotal: Money;
 }

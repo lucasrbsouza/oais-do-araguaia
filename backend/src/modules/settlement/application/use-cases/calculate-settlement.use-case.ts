@@ -34,7 +34,7 @@ export class CalculateSettlementUseCase {
     }
 
     const shares = this.strategy.calculate({
-      occupancies: input.occupancies,
+      stays: input.stays,
       commonTotal: Money.fromCents(input.commonTotalCents),
       alcoholTotal: Money.fromCents(input.alcoholTotalCents),
     });

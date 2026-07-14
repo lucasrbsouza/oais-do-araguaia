@@ -22,11 +22,11 @@ export class PrismaReservationRepository implements ReservationRepository {
     });
   }
 
-  findActiveByEventAndChalet(
+  listActiveByEventAndChalet(
     eventId: string,
     chaletId: string,
-  ): Promise<Reservation | null> {
-    return this.prisma.reservation.findFirst({
+  ): Promise<Reservation[]> {
+    return this.prisma.reservation.findMany({
       where: { eventId, chaletId, status: 'ACTIVE' },
     });
   }

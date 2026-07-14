@@ -390,6 +390,64 @@ function allocateByWeights(totalCents: number, weights: number[]): number[] {
   return shares.map((s) => s.floor);
 }
 
+const MS_PER_DAY = 86_400_000;
+
+/** Entradas simultâneas permitidas por chalé (uma por suíte). */
+const SUITES_PER_CHALET = 3;
+
+interface StayPeriod {
+  checkIn: string;
+  checkOut: string;
+}
+
+/** Diárias da estadia; bate-volta (entra e sai no mesmo dia) conta 1. */
+function nightsOf(stay: StayPeriod): number {
+  const days = Math.round(
+    (Date.parse(stay.checkOut) - Date.parse(stay.checkIn)) / MS_PER_DAY,
+  );
+  return Math.max(1, days);
+}
+
+/** Saída efetiva: o bate-volta ocupa a suíte pelo dia da entrada. */
+function occupiedUntil(stay: StayPeriod): number {
+  return Math.max(
+    Date.parse(stay.checkOut),
+    Date.parse(stay.checkIn) + MS_PER_DAY,
+  );
+}
+
+/** Estadias meio-abertas: quem sai dia 10 libera a suíte para quem entra dia 10. */
+function staysOverlap(a: StayPeriod, b: StayPeriod): boolean {
+  return (
+    Date.parse(a.checkIn) < occupiedUntil(b) &&
+    Date.parse(b.checkIn) < occupiedUntil(a)
+  );
+}
+
+/** O chalé tem 3 suítes: aceita até 3 entradas ao mesmo tempo. */
+function ensureSuitesAvailable(
+  db: Db,
+  eventId: string,
+  chaletId: string,
+  stay: StayPeriod,
+  excludeId?: string,
+): void {
+  const concurrent = db.reservations.filter(
+    (r) =>
+      r.eventId === eventId &&
+      r.chaletId === chaletId &&
+      r.status === "ACTIVE" &&
+      r.id !== excludeId &&
+      staysOverlap(stay, r),
+  ).length;
+  if (concurrent >= SUITES_PER_CHALET) {
+    throw new DemoApiError(
+      409,
+      `Chalé lotado neste período: já há ${SUITES_PER_CHALET} entradas simultâneas (uma por suíte).`,
+    );
+  }
+}
+
 function computeSettlement(db: Db, eventId: string): DbSettlement {
   const reservations = db.reservations.filter(
     (r) => r.eventId === eventId && r.status === "ACTIVE",
@@ -402,8 +460,30 @@ function computeSettlement(db: Db, eventId: string): DbSettlement {
     .filter((p) => p.category === "ALCOHOL")
     .reduce((s, p) => s + p.amountCents, 0);
 
-  const guestWeights = reservations.map((r) => r.adults * 10 + r.children * 5);
-  const alcoholWeights = reservations.map((r) => r.alcoholConsumers);
+  // Pesos em pessoa-diária. Um chalé pode ter várias entradas (3 suítes,
+  // estadias de durações diferentes): todas somam na cota única do chalé.
+  const chaletIds: string[] = [];
+  const guestByChalet = new Map<string, number>();
+  const alcoholByChalet = new Map<string, number>();
+  for (const r of reservations) {
+    if (!guestByChalet.has(r.chaletId)) {
+      chaletIds.push(r.chaletId);
+      guestByChalet.set(r.chaletId, 0);
+      alcoholByChalet.set(r.chaletId, 0);
+    }
+    const nights = nightsOf(r);
+    guestByChalet.set(
+      r.chaletId,
+      guestByChalet.get(r.chaletId)! + (r.adults * 10 + r.children * 5) * nights,
+    );
+    alcoholByChalet.set(
+      r.chaletId,
+      alcoholByChalet.get(r.chaletId)! + r.alcoholConsumers * nights,
+    );
+  }
+
+  const guestWeights = chaletIds.map((id) => guestByChalet.get(id)!);
+  const alcoholWeights = chaletIds.map((id) => alcoholByChalet.get(id)!);
 
   if (commonTotal > 0 && guestWeights.every((w) => w === 0)) {
     throw new DemoApiError(
@@ -424,8 +504,8 @@ function computeSettlement(db: Db, eventId: string): DbSettlement {
   return {
     eventId,
     computedAt: new Date().toISOString(),
-    items: reservations.map((r, i) => ({
-      chaletId: r.chaletId,
+    items: chaletIds.map((chaletId, i) => ({
+      chaletId,
       commonCents: commonShares[i],
       alcoholCents: alcoholShares[i],
       totalCents: commonShares[i] + alcoholShares[i],
@@ -1204,13 +1284,7 @@ function route(db: Db, req: DemoRequest): unknown {
     if (checkIn < event.startDate || checkOut > event.endDate || checkOut < checkIn) {
       throw new DemoApiError(422, "Entrada e saída devem estar dentro do período do evento.");
     }
-    if (
-      db.reservations.some(
-        (r) => r.eventId === event.id && r.chaletId === chalet.id && r.status === "ACTIVE",
-      )
-    ) {
-      throw new DemoApiError(409, "Este chalé já possui reserva ativa neste evento.");
-    }
+    ensureSuitesAvailable(db, event.id, chalet.id, { checkIn, checkOut });
     const reservation: DbReservation = {
       id: uid(),
       eventId: event.id,
@@ -1239,6 +1313,13 @@ function route(db: Db, req: DemoRequest): unknown {
     if (checkIn < event.startDate || checkOut > event.endDate || checkOut < checkIn) {
       throw new DemoApiError(422, "Entrada e saída devem estar dentro do período do evento.");
     }
+    ensureSuitesAvailable(
+      db,
+      reservation.eventId,
+      reservation.chaletId,
+      { checkIn, checkOut },
+      reservation.id,
+    );
     reservation.checkIn = checkIn;
     reservation.checkOut = checkOut;
     if (body.adults !== undefined) reservation.adults = Number(body.adults);

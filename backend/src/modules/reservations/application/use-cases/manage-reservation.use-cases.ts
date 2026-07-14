@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Event, EventStatus, Role } from '@prisma/client';
+import { Event, EventStatus, Reservation, Role } from '@prisma/client';
 import {
   ConflictError,
   ForbiddenError,
@@ -7,6 +7,11 @@ import {
   ValidationError,
 } from '../../../../shared/domain/domain-error';
 import { DateRange } from '../../../../shared/domain/date-range';
+import {
+  StayPeriod,
+  SUITES_PER_CHALET,
+  staysOverlap,
+} from '../../../../shared/domain/stay';
 import { AuthenticatedUser } from '../../../../shared/infrastructure/auth/decorators';
 import { ChaletRepository } from '../../../chalets/domain/chalet.repository';
 import { EventRepository } from '../../../events/domain/event.repository';
@@ -73,6 +78,25 @@ function ensureCanManage(user: AuthenticatedUser): void {
   }
 }
 
+/**
+ * O chalé tem 3 suítes, então aceita até 3 entradas ao mesmo tempo — entradas
+ * em sequência (ou com troca no mesmo dia) não disputam suíte e são livres.
+ */
+function ensureSuitesAvailable(
+  stay: StayPeriod,
+  activeStays: Reservation[],
+  excludeId?: string,
+): void {
+  const concurrent = activeStays.filter(
+    (other) => other.id !== excludeId && staysOverlap(stay, other),
+  ).length;
+  if (concurrent >= SUITES_PER_CHALET) {
+    throw new ConflictError(
+      `Chalé lotado neste período: já há ${SUITES_PER_CHALET} entradas simultâneas (uma por suíte).`,
+    );
+  }
+}
+
 @Injectable()
 export class CreateReservationUseCase {
   constructor(
@@ -100,16 +124,15 @@ export class CreateReservationUseCase {
       throw new ForbiddenError('Você só pode reservar o seu próprio chalé.');
     }
 
-    const existing =
-      await this.reservationRepository.findActiveByEventAndChalet(
+    const activeStays =
+      await this.reservationRepository.listActiveByEventAndChalet(
         input.eventId,
         input.chaletId,
       );
-    if (existing) {
-      throw new ConflictError(
-        'Este chalé já possui reserva ativa neste evento.',
-      );
-    }
+    ensureSuitesAvailable(
+      { checkIn: input.checkIn, checkOut: input.checkOut },
+      activeStays,
+    );
 
     const responsibleId =
       user.role === Role.ADMIN && input.responsibleId
@@ -153,11 +176,16 @@ export class UpdateReservationUseCase {
       throw new NotFoundError('Evento não encontrado.');
     }
     ensureEventOpen(event);
-    ensureStayWithinEvent(
-      event,
-      input.checkIn ?? reservation.checkIn,
-      input.checkOut ?? reservation.checkOut,
-    );
+    const checkIn = input.checkIn ?? reservation.checkIn;
+    const checkOut = input.checkOut ?? reservation.checkOut;
+    ensureStayWithinEvent(event, checkIn, checkOut);
+
+    const activeStays =
+      await this.reservationRepository.listActiveByEventAndChalet(
+        reservation.eventId,
+        reservation.chaletId,
+      );
+    ensureSuitesAvailable({ checkIn, checkOut }, activeStays, reservation.id);
 
     const updated = await this.reservationRepository.update(input.id, {
       checkIn: input.checkIn,
