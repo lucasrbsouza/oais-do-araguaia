@@ -67,6 +67,39 @@ describe("rateio do protótipo (demo)", () => {
     event = (demoApi("/events/e1", "GET", undefined) as EventView);
   });
 
+  it("diárias do funcionário entram no rateio comum, não no do álcool", () => {
+    // Só ALCOHOL é rateado entre consumidores; toda outra categoria é despesa
+    // comum. A diária do caseiro é do condomínio inteiro, então tem que cair no
+    // bolo comum — se caísse no de álcool, quem não bebe não pagaria o funcionário.
+    const antes = demoApi(
+      `/events/${event.id}/settlement/calculate`,
+      "POST",
+      undefined,
+    ) as SettlementView;
+
+    demoApi("/purchases", "POST", {
+      eventId: event.id,
+      date: event.startDate,
+      description: "Diária do caseiro",
+      category: "STAFF_DAILY",
+      amountCents: 30000,
+    });
+
+    const depois = demoApi(
+      `/events/${event.id}/settlement/calculate`,
+      "POST",
+      undefined,
+    ) as SettlementView;
+
+    const comum = (v: SettlementView) =>
+      v.items.reduce((s, i) => s + i.commonCents, 0);
+    const alcool = (v: SettlementView) =>
+      v.items.reduce((s, i) => s + i.alcoholCents, 0);
+
+    expect(comum(depois) - comum(antes)).toBe(30000);
+    expect(alcool(depois)).toBe(alcool(antes));
+  });
+
   it("aceita várias entradas no mesmo chalé e soma numa cota única", () => {
     // O seed já tem c1 (2 adultos + 2 crianças, 2 diárias) e c2 (3 adultos,
     // 2 diárias). Adiciona uma segunda entrada curta no c1: 1 diária.

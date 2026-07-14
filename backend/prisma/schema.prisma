@@ -48,6 +48,7 @@ enum PurchaseCategory {
   CLEANING
   BAKERY
   ICE
+  STAFF_DAILY
   OTHER
 }
 

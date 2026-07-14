@@ -24,6 +24,7 @@ const CATEGORY_LABELS: Record<PurchaseCategory, string> = {
   CLEANING: 'Limpeza',
   BAKERY: 'Padaria',
   ICE: 'Gelo',
+  STAFF_DAILY: 'Diárias do funcionário',
   OTHER: 'Outros',
 };
 

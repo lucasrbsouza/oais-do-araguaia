@@ -11,6 +11,7 @@ export const PURCHASE_CATEGORIES = [
   "CLEANING",
   "BAKERY",
   "ICE",
+  "STAFF_DAILY",
   "OTHER",
 ] as const;
 export type PurchaseCategory = (typeof PURCHASE_CATEGORIES)[number];
@@ -23,6 +24,7 @@ export const CATEGORY_LABELS: Record<PurchaseCategory, string> = {
   CLEANING: "Limpeza",
   BAKERY: "Padaria",
   ICE: "Gelo",
+  STAFF_DAILY: "Diárias do funcionário",
   OTHER: "Outros",
 };
 

@@ -122,7 +122,10 @@ export default function EventDetailClient() {
       {actionError && <ErrorState message={actionError} />}
 
       <div className="border-b border-hairline" role="tablist" aria-label="Seções do evento">
-        <div className="flex gap-1 overflow-x-auto">
+        {/* Quebra linha em vez de rolar de lado: com overflow-x as abas finais
+            ("Pagamentos", "Relatório") ficavam escondidas no celular sem nenhuma
+            pista de que existiam. Acima de 1024px as 5 cabem numa linha só. */}
+        <div className="flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -130,7 +133,7 @@ export default function EventDetailClient() {
               aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "whitespace-nowrap border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted hover:text-ink cursor-pointer",
+                "whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-muted hover:text-ink cursor-pointer sm:px-4",
                 tab === t.id && "border-ink text-ink",
               )}
             >
