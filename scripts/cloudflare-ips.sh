@@ -42,11 +42,23 @@ echo "  $COUNT faixas obtidas"
 # ── ufw ───────────────────────────────────────────────────────────
 # Remove as regras antigas pela marca; sempre apaga a primeira que casa e
 # re-escaneia, porque deletar renumera a lista.
-while :; do
-  num="$(ufw status numbered | grep -m1 "$UFW_TAG" | sed -n 's/^\[[[:space:]]*\([0-9]\+\)\].*/\1/p')"
+# Teto de segurança: se o `ufw delete` parar de surtir efeito, o laço giraria
+# para sempre — inaceitável num script agendado por cron.
+removidas=0
+while (( removidas < 200 )); do
+  # O `|| true` é obrigatório: sem regra marcada o grep sai com 1, o pipefail
+  # propaga e o set -e mataria o script justamente na primeira execução.
+  num="$(ufw status numbered | grep -m1 "$UFW_TAG" | sed -n 's/^\[[[:space:]]*\([0-9]\+\)\].*/\1/p' || true)"
   [[ -z "$num" ]] && break
   ufw --force delete "$num" > /dev/null
+  removidas=$(( removidas + 1 ))
 done
+
+if (( removidas >= 200 )); then
+  echo "ERRO: não consegui remover as regras antigas de '$UFW_TAG'." >&2
+  echo "      Verifique 'ufw status numbered' — o firewall pode estar inconsistente." >&2
+  exit 1
+fi
 
 while read -r cidr; do
   [[ -z "$cidr" ]] && continue
