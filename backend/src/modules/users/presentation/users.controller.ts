@@ -90,7 +90,11 @@ export class UsersController {
   }
 
   @Post('me/avatar')
-  @UseInterceptors(FileInterceptor('file'))
+  // Corta no streaming. O MaxFileSizeValidator abaixo só olha o tamanho depois
+  // que o multer já bufferizou o arquivo inteiro na memória.
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_AVATAR_BYTES } }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
