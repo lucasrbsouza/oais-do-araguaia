@@ -145,6 +145,10 @@ services:
     restart: always
     environment:
       NODE_ENV: production
+      # O Docker seta HOSTNAME com o id do container e o Next standalone faz
+      # bind nele — deixando 127.0.0.1 de fora, o que reprova o healthcheck.
+      # Forçar 0.0.0.0 faz o Next escutar em todas as interfaces.
+      HOSTNAME: "0.0.0.0"
     depends_on:
       backend:
         condition: service_healthy
