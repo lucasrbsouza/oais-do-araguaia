@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import Link from "next/link";
+import { Check, CheckCircle2, Copy } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Chalet, UserItem } from "@/lib/types";
@@ -30,6 +31,15 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+/** Credenciais que o admin repassa ao novo usuário. */
+interface NewCredentials {
+  name: string;
+  email: string;
+  password: string;
+}
+
+const SITE_URL = "https://oasisaraguaia.com.br";
+
 export default function UsersPage() {
   const { user: sessionUser } = useSession();
   const isAdmin = sessionUser?.role === "ADMIN";
@@ -38,6 +48,9 @@ export default function UsersPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  // Guardadas ao criar para exibir na tela de sucesso — a senha só existe aqui,
+  // em texto puro, no momento do envio (o backend só armazena o hash).
+  const [credentials, setCredentials] = useState<NewCredentials | null>(null);
 
   const { data: users, isLoading, error } = useQuery({
     queryKey: ["users"],
@@ -78,10 +91,16 @@ export default function UsersPage() {
       }
       return created;
     },
-    onSuccess: () => {
+    onSuccess: (_created, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["users"] });
       void queryClient.invalidateQueries({ queryKey: ["chalets"] });
       setOpen(false);
+      // Mostra as credenciais para o admin copiar e enviar ao usuário.
+      setCredentials({
+        name: variables.name,
+        email: variables.email,
+        password: variables.password,
+      });
       form.reset({ role: "OWNER", phone: "", chaletId: "" });
     },
     onError: (err: Error) => {
@@ -125,12 +144,12 @@ export default function UsersPage() {
       <Table>
         <thead>
           <tr>
-            <Th>Nome</Th>
-            <Th>E-mail</Th>
-            <Th>Telefone</Th>
-            <Th>Perfil</Th>
-            <Th>Situação</Th>
-            {isAdmin && <Th className="w-44">Ações</Th>}
+            <Th className="xl:px-2">Nome</Th>
+            <Th className="xl:px-2">E-mail</Th>
+            <Th className="xl:px-2">Telefone</Th>
+            <Th className="xl:px-2">Perfil</Th>
+            <Th className="xl:px-2">Situação</Th>
+            {isAdmin && <Th className="w-40 xl:px-2">Ações</Th>}
           </tr>
         </thead>
         <tbody>
@@ -144,7 +163,7 @@ export default function UsersPage() {
                 isMe && "bg-primary/[0.04] border-l-2 border-l-primary",
               )}
             >
-              <Td label="Nome">
+              <Td label="Nome" className="xl:px-2">
                 <Link
                   href={isMe ? "/perfil" : `/usuarios/${u.id}`}
                   className="flex items-center gap-2.5 font-medium text-ink hover:text-primary transition-colors"
@@ -158,16 +177,16 @@ export default function UsersPage() {
                   )}
                 </Link>
               </Td>
-              <Td label="E-mail">{u.email}</Td>
-              <Td label="Telefone" className="text-muted">{u.phone || "—"}</Td>
-              <Td label="Perfil">{u.role === "ADMIN" ? "Administrador" : "Proprietário"}</Td>
-              <Td label="Situação">
+              <Td label="E-mail" className="xl:px-2">{u.email}</Td>
+              <Td label="Telefone" className="text-muted xl:px-2">{u.phone || "—"}</Td>
+              <Td label="Perfil" className="xl:px-2">{u.role === "ADMIN" ? "Administrador" : "Proprietário"}</Td>
+              <Td label="Situação" className="xl:px-2">
                 <Badge tone={u.active ? "success" : "neutral"}>
                   {u.active ? "Ativo" : "Inativo"}
                 </Badge>
               </Td>
               {isAdmin && (
-                <Td>
+                <Td className="xl:px-2">
                   <div className="flex flex-wrap items-center gap-1 xl:flex-nowrap">
                     <Button
                       variant="ghost"
@@ -259,6 +278,13 @@ export default function UsersPage() {
         </Dialog>
       )}
 
+      {isAdmin && credentials && (
+        <CredentialsDialog
+          credentials={credentials}
+          onClose={() => setCredentials(null)}
+        />
+      )}
+
       {isAdmin && (
         <ConfirmDialog
           open={deleteTarget !== null}
@@ -275,6 +301,80 @@ export default function UsersPage() {
           loading={deleteMutation.isPending}
         />
       )}
+    </div>
+  );
+}
+
+function CredentialsDialog({
+  credentials,
+  onClose,
+}: {
+  credentials: NewCredentials;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const message =
+    `Olá, ${credentials.name}! Seu acesso ao sistema do condomínio Oásis do Araguaia está pronto.\n\n` +
+    `Site: ${SITE_URL}\n` +
+    `E-mail: ${credentials.email}\n` +
+    `Senha provisória: ${credentials.password}\n\n` +
+    "Ao entrar pela primeira vez, o sistema vai pedir para você criar uma nova senha.";
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Alguns navegadores bloqueiam a Clipboard API fora de HTTPS ou de um
+      // gesto do usuário; nesse caso o admin ainda pode selecionar o texto.
+    }
+  }
+
+  return (
+    <Dialog open onClose={onClose} title="Usuário criado com sucesso">
+      <div className="space-y-5">
+        <div className="flex items-start gap-3 rounded-md bg-success/10 p-3 text-sm text-body">
+          <CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden />
+          <p>
+            Envie os dados de acesso abaixo para <strong>{credentials.name}</strong>.
+            A senha é provisória: será trocada no primeiro acesso.
+          </p>
+        </div>
+
+        <dl className="space-y-2">
+          <CredentialRow label="Site" value={SITE_URL} />
+          <CredentialRow label="E-mail" value={credentials.email} />
+          <CredentialRow label="Senha provisória" value={credentials.password} />
+        </dl>
+
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button variant="secondary" onClick={onClose}>
+            Concluir
+          </Button>
+          <Button onClick={copy}>
+            {copied ? (
+              <>
+                <Check className="size-4" aria-hidden /> Copiado!
+              </>
+            ) : (
+              <>
+                <Copy className="size-4" aria-hidden /> Copiar informações
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function CredentialRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-hairline bg-surface-soft px-3 py-2">
+      <dt className="text-xs font-medium text-muted">{label}</dt>
+      <dd className="mt-0.5 break-all font-mono text-sm text-ink">{value}</dd>
     </div>
   );
 }
