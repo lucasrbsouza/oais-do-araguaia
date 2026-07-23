@@ -68,10 +68,9 @@ services:
     environment:
       # Token da Cloudflare com permissão Zone:DNS:Edit — só para o DNS-01.
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
-      # O Traefik fixa a API do Docker em 1.24 e não negocia; o daemon novo
-      # (Engine 29+) já não aceita versões antigas. Fixamos numa versão que
-      # ele suporta, senão o provider docker nem carrega os roteadores.
-      DOCKER_API_VERSION: "1.44"
+      # Nota: o Traefik crava a API do Docker em 1.24 e ignora DOCKER_API_VERSION.
+      # O Docker Engine 29 só aceita a partir da 1.40, então a compatibilidade é
+      # resolvida no daemon (DOCKER_MIN_API_VERSION=1.24), não aqui. Ver DEPLOY.md.
     ports:
       - "80:80"
       - "443:443"

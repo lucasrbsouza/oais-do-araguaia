@@ -153,6 +153,27 @@ Confira (tem que ser v2.x):
 docker compose version
 ```
 
+### Compatibilidade da API do Docker com o Traefik
+
+O Traefik crava a API do Docker em 1.24 e ignora `DOCKER_API_VERSION`. O Docker
+Engine 29 só aceita a partir da 1.40, então o provider docker do Traefik falha
+("client version 1.24 is too old") e nenhum roteador é carregado — sem roteador,
+o certificado nunca é pedido. Reabilite a API antiga no daemon:
+
+```bash
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo tee /etc/systemd/system/docker.service.d/api-compat.conf > /dev/null <<'EOF'
+[Service]
+Environment=DOCKER_MIN_API_VERSION=1.24
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+O socket do Docker não é exposto (só local), então reabilitar a API antiga não
+abre superfície de ataque. Se um dia o Traefik passar a negociar a versão, este
+override pode ser removido.
+
 ## 4. Código e configuração
 
 ```bash
