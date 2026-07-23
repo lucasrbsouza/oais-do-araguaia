@@ -19,11 +19,23 @@ EXPOSE 3001
 CMD ["sh", "-c", "npx prisma migrate deploy && npm run start:dev"]
 
 # ── Build de produção ─────────────────────────────────────────────
+# O seed é compilado à parte porque o `nest build` só olha para `src/`.
+# Sem isso o seed em produção dependeria de ts-node, que o prune remove.
+# A ordem importa: `nest build` limpa o dist antes de escrever.
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate && npm run build && npm prune --omit=dev
+RUN npx prisma generate \
+  && npm run build \
+  && npx tsc prisma/seed.ts \
+       --outDir dist/prisma \
+       --module nodenext \
+       --moduleResolution nodenext \
+       --target ES2023 \
+       --esModuleInterop \
+       --skipLibCheck \
+  && npm prune --omit=dev
 
 # ── Produção ──────────────────────────────────────────────────────
 FROM node:22-alpine AS production
@@ -36,4 +48,6 @@ COPY --from=build /app/package*.json ./
 RUN mkdir -p /app/uploads && chown -R node:node /app
 USER node
 EXPOSE 3001
+# `prisma` está em dependencies, então o CLI sobrevive ao prune e o npx
+# resolve o binário local — sem baixar nada da internet a cada boot.
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
