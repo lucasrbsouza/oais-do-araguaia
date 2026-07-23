@@ -308,8 +308,37 @@ sudo crontab -u deploy -e
 10 3 * * * /opt/oais-do-araguaia/scripts/backup.sh >> /var/log/oais-backup.log 2>&1
 ```
 
-> Backup que só existe na própria VPS não é backup. O script tem um bloco
-> comentado no fim para `rclone`/`scp` — configure um destino externo.
+### Cópia off-site (Google Drive via rclone)
+
+Backup que só existe na própria VPS não é backup. Com `RCLONE_REMOTE` definido no
+`.env`, o `backup.sh` envia os dois arquivos do dia para o Drive e poda no destino
+o que passou da retenção.
+
+Instale e configure o remote (a VPS é headless, então o OAuth é feito numa
+máquina com navegador):
+
+```bash
+sudo -v ; curl https://rclone.org/install.sh | sudo bash   # instala na VPS
+rclone config
+```
+
+No `rclone config`: `n` (novo) → nome `gdrive` → tipo `drive` → `client_id` e
+`client_secret` em branco → scope **`drive.file`** (rclone só enxerga o que ele
+mesmo cria — mais seguro) → resto em branco → em "Use auto config?" responda
+**`n`**. O rclone imprime um comando `rclone authorize "drive" ...`; rode-o numa
+máquina com navegador (instale o rclone lá antes), autorize no Google, copie o
+token que ele devolve e cole de volta no prompt da VPS.
+
+Depois aponte o `.env` para uma pasta do Drive e teste:
+
+```bash
+echo 'RCLONE_REMOTE=gdrive:oais-backups' >> .env    # (edite; não duplique a linha)
+./scripts/backup.sh
+rclone ls gdrive:oais-backups
+```
+
+O `rclone ls` deve listar o `db_*.dump` e o `uploads_*.tar.gz` do dia. O cron
+diário passa a enviar sozinho.
 
 Restaurar:
 

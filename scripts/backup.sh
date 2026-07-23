@@ -70,11 +70,20 @@ find "$BACKUP_DIR" -name 'db_*.dump'        -mtime "+$RETENTION_DAYS" -delete
 find "$BACKUP_DIR" -name 'uploads_*.tar.gz' -mtime "+$RETENTION_DAYS" -delete
 
 # ── Cópia fora da VPS ─────────────────────────────────────────────
-# Backup que só existe na própria máquina não é backup: se a VPS morrer,
-# morre junto. Configure um destino externo e descomente:
-#
-#   rclone copy "$BACKUP_DIR" remoto:oais-backups --max-age 25h
-#
-# ou, para outro servidor:
-#
-#   scp "$DB_FILE" "$UP_FILE" usuario@destino:/caminho/backups/
+# Backup que só existe na própria máquina não é backup: se a VPS morrer, morre
+# junto. Se RCLONE_REMOTE estiver definido no .env (ex.: gdrive:oais-backups),
+# envia os dois arquivos do dia e poda no destino o que passou da retenção.
+# Sem a variável, este bloco é ignorado e o backup fica só local.
+RCLONE_REMOTE="$(grep -E '^RCLONE_REMOTE=' "$ENV_FILE" | cut -d= -f2- || true)"
+
+if [[ -n "$RCLONE_REMOTE" ]] && command -v rclone > /dev/null; then
+  if rclone copy "$DB_FILE" "$RCLONE_REMOTE/" && rclone copy "$UP_FILE" "$RCLONE_REMOTE/"; then
+    rclone delete "$RCLONE_REMOTE" --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
+    echo "  enviado para $RCLONE_REMOTE"
+  else
+    # Falha no envio não invalida o backup local, mas precisa gritar no log.
+    echo "AVISO: cópia off-site para $RCLONE_REMOTE falhou — backup existe só na VPS." >&2
+  fi
+elif [[ -n "$RCLONE_REMOTE" ]]; then
+  echo "AVISO: RCLONE_REMOTE definido mas rclone não está instalado." >&2
+fi
