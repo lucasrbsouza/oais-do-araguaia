@@ -1,0 +1,33 @@
+# Prometheus — alvos raspados na rede interna do compose de produção.
+# Todos os nomes de host são os nomes dos serviços no docker-compose.prod.yml.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Tráfego/latência/status por rota e entrypoint (entrypoint dedicado :8082).
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:8082"]
+
+  # CPU/RAM/disco/rede do host.
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # CPU/mem/rede por container.
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]

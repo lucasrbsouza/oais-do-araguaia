@@ -65,6 +65,13 @@ services:
       # - --certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
       - --log.level=INFO
       - --accesslog=true
+      # Métricas para o Prometheus, num entrypoint dedicado (:8082) que NÃO é
+      # publicado no host — só o Prometheus, na rede interna, alcança.
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entrypoint=metrics
+      - --metrics.prometheus.addEntryPointsLabels=true
+      - --metrics.prometheus.addServicesLabels=true
+      - --entrypoints.metrics.address=:8082
     environment:
       # Token da Cloudflare com permissão Zone:DNS:Edit — só para o DNS-01.
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
@@ -97,12 +104,14 @@ services:
       - traefik.http.middlewares.www-redirect.redirectregex.replacement=https://oasisaraguaia.com.br/$${1}
       - traefik.http.middlewares.www-redirect.redirectregex.permanent=true
     networks:
+      # Entra também na rede interna para o Prometheus raspar traefik:8082.
       - web
+      - internal
 
   backend:
-    build:
-      context: ./backend
-      target: production
+    # Imagem construída e publicada no GHCR pelo CI (.github/workflows/deploy.yml).
+    # IMAGE_TAG = SHA do commit no deploy (imutável); default latest.
+    image: ghcr.io/lucasrbsouza/oais-backend:${IMAGE_TAG:-latest}
     restart: always
     env_file: .env
     environment:
@@ -137,11 +146,9 @@ services:
       - web
 
   frontend:
-    build:
-      context: ./frontend
-      target: production
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    # Imagem do GHCR. O NEXT_PUBLIC_API_URL vai CRAVADO na imagem no build do CI
+    # (Variable do repo), não aqui — mudar o domínio exige rebuild no CI.
+    image: ghcr.io/lucasrbsouza/oais-frontend:${IMAGE_TAG:-latest}
     restart: always
     environment:
       NODE_ENV: production
@@ -176,12 +183,109 @@ services:
     networks:
       - web
 
+  # ── Observabilidade (Prometheus + Grafana) ────────────────────────
+  # Tudo na rede interna. Grafana e Prometheus publicam SÓ em 127.0.0.1 —
+  # acesso por túnel SSH (ssh -L 3000:localhost:3000). O Docker fura o ufw ao
+  # publicar porta (ver DEPLOY.md §2), então o bind em loopback é o que impede
+  # o painel de vazar para a internet. Nenhum serviço de monitoring é exposto
+  # pelo Traefik.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: always
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - internal
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - internal
+
+  # Métricas do host (CPU, RAM, disco, rede). Precisa enxergar o rootfs.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: always
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - internal
+
+  # Métricas por container (CPU/mem/rede de cada serviço).
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: always
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - internal
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    restart: always
+    environment:
+      # Reusa as credenciais do Postgres. Caracteres especiais na senha
+      # precisam de percent-encoding, como no DATABASE_URL.
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0
+    restart: always
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+
 volumes:
   postgres_data:
   redis_data:
   uploads_data:
   backend_logs:
   traefik_acme:
+  prometheus_data:
+  grafana_data:
 
 networks:
   # Nomes fixos: o Traefik precisa saber por qual rede falar com o backend,

@@ -1,0 +1,48 @@
+name: CI
+
+# Roda em todo push e em todo PR. Sem deploy — só qualidade.
+on:
+  push:
+  pull_request:
+
+# Cancela execuções antigas do mesmo ref quando chega commit novo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # Os specs importam o client gerado do Prisma; sem generate o jest quebra.
+      - run: npx prisma generate
+      - run: npm run lint
+      # Só unitários (domain/ e application/, repositórios mockados). O e2e NÃO
+      # roda aqui: ele APAGA o banco e não agrega valor no CI.
+      - run: npm test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test

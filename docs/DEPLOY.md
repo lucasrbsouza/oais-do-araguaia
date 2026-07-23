@@ -352,25 +352,117 @@ docker compose -f docker-compose.prod.yml exec -T backend \
 
 ## 9. Atualizar
 
+O caminho normal é o **deploy automático** (seção 10): dá push na `main`, o CI
+builda as imagens no GHCR e você aprova o deploy. O passo manual abaixo é o
+fallback para quando a esteira está fora do ar.
+
 ```bash
 cd /opt/oais-do-araguaia
 ./scripts/backup.sh
 git pull
-docker compose -f docker-compose.prod.yml up -d --build
+# Puxa as imagens já publicadas no GHCR (NÃO builda na VPS).
+docker compose -f docker-compose.prod.yml pull backend frontend
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-Migrations aplicam sozinhas no boot. Se mudar `NEXT_PUBLIC_API_URL`, o rebuild do
-frontend é obrigatório (`--build` já cobre).
+> As imagens agora vêm do **GHCR**, construídas pelo CI — o compose usa `image:`,
+> não `build:`. Buildar na VPS deixou de ser o fluxo (o `next build` pica ~3 GB e
+> concorre com a produção rodando). Para forçar uma imagem específica, exporte
+> `IMAGE_TAG=<sha>` antes do `up -d`.
+
+Migrations aplicam sozinhas no boot. `NEXT_PUBLIC_API_URL` é cravado na imagem no
+build do CI (Variable do repo) — mudar o domínio exige um novo build lá, não na VPS.
+
+## 10. CI/CD (deploy automático)
+
+Duas esteiras no GitHub Actions (`.github/workflows/`):
+
+- **`ci.yml`** — em todo push e PR: lint + testes unitários de `backend/` e
+  `frontend/`. O `test:e2e` **não** roda (apaga o banco).
+- **`deploy.yml`** — em push na `main`: roda os testes, **builda e publica** as
+  imagens no GHCR (`ghcr.io/lucasrbsouza/oais-backend` e `-frontend`, tags `latest`
+  e o SHA), e então **espera aprovação** para fazer o deploy via SSH na VPS
+  (`backup.sh` → `git pull` → `pull` das imagens → `up -d`).
+
+```
+push main → test → build-images (GHCR) → [aprovar] → deploy (SSH na VPS)
+```
+
+### Configuração (uma vez)
+
+1. **Segredos e variáveis** no repo (*Settings → Secrets and variables → Actions*):
+   - Secret `DEPLOY_HOST` — IP de origem da VPS.
+   - Secret `DEPLOY_SSH_KEY` — chave **privada** de uma chave dedicada de deploy.
+     Gere um par novo (`ssh-keygen -t ed25519 -C deploy-ci`), cole a privada aqui
+     e a pública em `~deploy/.ssh/authorized_keys` na VPS.
+   - Variable `NEXT_PUBLIC_API_URL` = `https://oasisaraguaia.com.br`.
+   - `GITHUB_TOKEN` já existe e empurra as imagens pro GHCR — nada a criar.
+2. **Environment `production`** (*Settings → Environments*): crie e marque
+   **Required reviewers** (você). É isso que segura o deploy esperando o clique em
+   *Review deployments → Approve*.
+3. **Packages públicos**: após o primeiro build, em cada package no GHCR
+   (*Package settings → Change visibility → Public*). O repo já é público; assim a
+   VPS dá `docker pull` **sem login**. (Alternativa: um PAT `read:packages` e
+   `docker login ghcr.io` na VPS.)
+4. **Porta 22 alcançável pelos runners**: o deploy faz SSH de entrada. Se você
+   restringiu a 22 ao seu IP (seção 2), os runners do Actions não conectam (IP
+   deles é dinâmico). Mantenha a 22 aberta com **só chave + fail2ban**.
+
+> O arquivo do workflow só sobe se o token de push tiver escopo `workflow`. O token
+> usado no protótipo não tem — por isso o `deploy-pages.yml` ficou em
+> `workflows-disabled/`. Use um PAT com `workflow` para dar push destes arquivos,
+> ou adicione-os pela interface do GitHub.
+
+### Rollback
+
+Rode o `deploy.yml` por **workflow_dispatch** com o campo `tag` = SHA de um deploy
+anterior. Ele pula o build e sobe aquela imagem. (Na mão, na VPS:
+`export IMAGE_TAG=<sha> && docker compose -f docker-compose.prod.yml up -d`.)
+
+## 11. Monitoramento (Grafana + Prometheus)
+
+A stack de produção sobe também Prometheus, Grafana e exporters
+(node-exporter, cAdvisor, postgres-exporter, redis-exporter). O Traefik expõe suas
+métricas num entrypoint interno (`:8082`), raspado pelo Prometheus.
+
+**Nada disso é exposto na internet.** Grafana e Prometheus publicam só em
+`127.0.0.1` na VPS — o Docker fura o ufw ao publicar porta (seção 2), então o bind
+em loopback é o que garante que o painel não vaze. O acesso é por **túnel SSH**:
+
+```bash
+ssh -L 3000:localhost:3000 -L 9090:localhost:9090 deploy@<IP-DA-VPS>
+```
+
+Depois, no seu navegador:
+
+- `http://localhost:3000` — Grafana. Login `admin` / `GRAFANA_ADMIN_PASSWORD` (do
+  `.env`). Datasource Prometheus e os dashboards já vêm provisionados (pasta
+  **Oásis**): *Host* (CPU/RAM/disco), *Containers*, *Banco* (Postgres/Redis) e
+  *Traefik* (req/s, latência p95, erros 5xx).
+- `http://localhost:9090/targets` — Prometheus. Todos os alvos devem estar `UP`.
+
+Conferir de fora que o monitoramento **não** vazou (tem que dar timeout):
+
+```bash
+curl -sS --connect-timeout 5 http://<IP-DA-VPS>:3000 && echo "VAZOU" || echo "fechado (esperado)"
+curl -sS --connect-timeout 5 http://<IP-DA-VPS>:9090 && echo "VAZOU" || echo "fechado (esperado)"
+```
+
+Config em `monitoring/`: `prometheus.yml` (alvos) e `grafana/` (datasource,
+provider e os dashboards em JSON). Retenção do Prometheus: 30 dias.
 
 ## Arquitetura em produção
 
 | Serviço  | Rede               | Porta no host |
 |----------|--------------------|---------------|
-| traefik  | `oais_web`         | 80, 443 (só faixas Cloudflare) |
+| traefik  | `oais_web` + `oais_internal` | 80, 443 (só faixas Cloudflare); 8082 métricas (interno, não publicado) |
 | frontend | `oais_web`         | —             |
 | backend  | `oais_web` + `oais_internal` | —    |
 | postgres | `oais_internal`    | —             |
 | redis    | `oais_internal`    | —             |
+| prometheus | `oais_internal`  | `127.0.0.1:9090` (só túnel SSH) |
+| grafana  | `oais_internal`    | `127.0.0.1:3000` (só túnel SSH) |
+| node-exporter / cadvisor / postgres-exporter / redis-exporter | `oais_internal` | — |
 
 Postgres e Redis não são alcançáveis de fora. O backend fica nas duas redes: o
 Traefik fala com ele pela `oais_web`, e ele fala com o banco pela `oais_internal`
@@ -425,3 +517,8 @@ docker stats --no-stream
 | CORS bloqueado | `CORS_ORIGINS` sem `https://oasisaraguaia.com.br` |
 | Auditoria gravando `172.x.x.x` | `CLOUDFLARE_IPS` vazio, ou `trust proxy` fora de sincronia |
 | Rate limit disparando cedo demais | mesma causa: todos os usuários caem num IP só |
+| Deploy falha no `pull` das imagens | packages do GHCR ainda privados, ou VPS sem `docker login ghcr.io` |
+| Deploy trava sem conectar na VPS | porta 22 restrita ao seu IP — runners do Actions não passam |
+| `git push` recusa o workflow | token de push sem escopo `workflow` |
+| Grafana/Prometheus sem dado | Prometheus `.../targets` com alvo `DOWN`; confira o serviço no `ps` |
+| Grafana acessível pela internet | porta publicada em `0.0.0.0` — tem que ser `127.0.0.1:` |

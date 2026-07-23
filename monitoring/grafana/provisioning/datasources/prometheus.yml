@@ -1,0 +1,12 @@
+# Datasource provisionado. O uid fixo `prometheus` é referenciado pelos
+# dashboards em monitoring/grafana/dashboards/*.json.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
