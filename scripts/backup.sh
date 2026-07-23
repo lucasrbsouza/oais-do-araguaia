@@ -35,18 +35,25 @@ UP_FILE="$BACKUP_DIR/uploads_$STAMP.tar.gz"
 echo "[$(date -Is)] iniciando backup"
 
 # ── Banco ─────────────────────────────────────────────────────────
-# Formato custom (-Fc): comprimido e restaurável seletivamente.
+# Dump para um arquivo DENTRO do container. O formato custom (-Fc) é
+# comprimido e restaurável seletivamente, mas o `pg_restore -l` que valida
+# precisa fazer seek — não funciona num pipe. Por isso geramos, validamos e
+# só então copiamos para o host.
+CONTAINER_DUMP="/tmp/oais_db_$STAMP.dump"
+
 "${COMPOSE[@]}" exec -T postgres \
-  pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc > "$DB_FILE"
+  pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f "$CONTAINER_DUMP"
 
 # Dump truncado passa despercebido por meses. Confere antes de confiar.
-if ! pg_restore -l "$DB_FILE" > /dev/null 2>&1; then
-  if ! "${COMPOSE[@]}" exec -T postgres pg_restore -l /dev/stdin < "$DB_FILE" > /dev/null 2>&1; then
-    echo "ERRO: dump ilegível, backup abortado: $DB_FILE" >&2
-    rm -f "$DB_FILE"
-    exit 1
-  fi
+if ! "${COMPOSE[@]}" exec -T postgres pg_restore -l "$CONTAINER_DUMP" > /dev/null 2>&1; then
+  echo "ERRO: dump ilegível, backup abortado." >&2
+  "${COMPOSE[@]}" exec -T postgres rm -f "$CONTAINER_DUMP" 2>/dev/null || true
+  exit 1
 fi
+
+"${COMPOSE[@]}" cp "postgres:$CONTAINER_DUMP" "$DB_FILE"
+"${COMPOSE[@]}" exec -T postgres rm -f "$CONTAINER_DUMP"
+chmod 600 "$DB_FILE"
 
 # ── Uploads (comprovantes, avatares) ──────────────────────────────
 "${COMPOSE[@]}" exec -T backend tar -czf - -C /app uploads > "$UP_FILE"
