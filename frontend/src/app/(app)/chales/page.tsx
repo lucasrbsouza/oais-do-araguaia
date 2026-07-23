@@ -92,12 +92,21 @@ export default function ChaletsPage() {
   });
 
   const availableUsersToLink = useMemo(() => {
-    if (!users || !membersTarget) return [];
-    const memberIds = new Set((members ?? []).map((m) => m.id));
+    if (!users || !chalets) return [];
+    // Conjunto de todos os usuários já vinculados a qualquer chalé (como proprietário ou familiar)
+    const linkedUserIds = new Set<string>();
+    for (const c of chalets) {
+      if (c.owner?.id) linkedUserIds.add(c.owner.id);
+      if (c.members) {
+        for (const m of c.members) {
+          linkedUserIds.add(m.id);
+        }
+      }
+    }
     return users.filter(
-      (u) => u.id !== membersTarget.owner?.id && !memberIds.has(u.id),
+      (u) => u.role !== "ADMIN" && !linkedUserIds.has(u.id),
     );
-  }, [users, membersTarget, members]);
+  }, [users, chalets]);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["chalets"] });

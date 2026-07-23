@@ -231,18 +231,13 @@ export class AddChaletMemberUseCase {
       throw new ConflictError('Informe um usuário existente ou dados para cadastro.');
     }
 
-    if (chalet.ownerId === targetUser.id) {
-      throw new ConflictError(
-        'O proprietário do chalé não pode ser adicionado como familiar.',
-      );
-    }
-
-    const isAlreadyMember = await this.chaletRepository.isOwnerOrMember(
+    const isAlreadyLinked = await this.chaletRepository.isMemberOfAnyChalet(
       targetUser.id,
-      input.chaletId,
     );
-    if (isAlreadyMember) {
-      throw new ConflictError('Este usuário já é membro deste chalé.');
+    if (isAlreadyLinked) {
+      throw new ConflictError(
+        'Este usuário já está vinculado a um chalé (como proprietário ou familiar). Remova o vínculo atual antes de associá-lo a outro chalé.',
+      );
     }
 
     await this.chaletRepository.addMember(input.chaletId, targetUser.id);

@@ -1125,11 +1125,14 @@ function route(db: Db, req: DemoRequest): unknown {
         throw new DemoApiError(400, "Informe um usuário existente ou dados para cadastro.");
       }
 
-      if (chalet.ownerId === newUser.id) {
-        throw new DemoApiError(409, "O proprietário do chalé não pode ser adicionado como familiar.");
-      }
-      if (isChaletOwnerOrMember(db, chaletId, newUser.id)) {
-        throw new DemoApiError(409, "Este usuário já é membro deste chalé.");
+      const isAlreadyLinked =
+        db.chalets.some((c) => c.ownerId === newUser.id) ||
+        (db.chaletMembers ?? []).some((m) => m.userId === newUser.id);
+      if (isAlreadyLinked) {
+        throw new DemoApiError(
+          409,
+          "Este usuário já está vinculado a um chalé (como proprietário ou familiar). Remova o vínculo atual primeiro.",
+        );
       }
 
       db.chaletMembers ??= [];

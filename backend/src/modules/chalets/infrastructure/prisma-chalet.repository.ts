@@ -80,6 +80,15 @@ export class PrismaChaletRepository implements ChaletRepository {
     return !!chalet;
   }
 
+  async isMemberOfAnyChalet(userId: string): Promise<boolean> {
+    const chalet = await this.prisma.chalet.findFirst({
+      where: {
+        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+      },
+    });
+    return !!chalet;
+  }
+
   async listMembers(chaletId: string): Promise<ChaletMemberDetail[]> {
     const members = await this.prisma.chaletMember.findMany({
       where: { chaletId },

@@ -37,6 +37,7 @@ export abstract class ChaletRepository {
   abstract listMembers(chaletId: string): Promise<ChaletMemberDetail[]>;
   abstract addMember(chaletId: string, userId: string): Promise<void>;
   abstract removeMember(chaletId: string, userId: string): Promise<void>;
+  abstract isMemberOfAnyChalet(userId: string): Promise<boolean>;
   abstract countMembers(chaletId: string): Promise<number>;
   abstract hasHistory(id: string): Promise<boolean>;
   abstract delete(id: string): Promise<void>;
