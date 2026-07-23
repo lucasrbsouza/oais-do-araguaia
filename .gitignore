@@ -7,8 +7,8 @@ uploads/
 .env
 .env.*
 !.env.example
+!.env.production.example
 *.log
-nginx/certs/
 
 # Ferramentas de desenvolvimento com IA (não versionar)
 .claude/

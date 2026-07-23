@@ -31,6 +31,71 @@ services:
     networks:
       - internal
 
+  # ── Roteamento + TLS automático ───────────────────────────────────
+  # Descobre frontend/backend pelos labels. Emite e renova o certificado
+  # sozinho pelo desafio HTTP-01 no entrypoint `web`.
+  traefik:
+    image: traefik:v3.3
+    restart: always
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.docker.network=oais_web
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+      - --entrypoints.websecure.address=:443
+      # Só as faixas da Cloudflare podem ditar X-Forwarded-For. Sem isso o IP
+      # real do usuário se perde e a auditoria grava o IP errado.
+      # Atualize com scripts/cloudflare-ips.sh.
+      - --entrypoints.web.forwardedHeaders.trustedIPs=${CLOUDFLARE_IPS}
+      - --entrypoints.websecure.forwardedHeaders.trustedIPs=${CLOUDFLARE_IPS}
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+      # Desafio DNS-01, não HTTP-01: atrás do proxy da Cloudflare o desafio
+      # HTTP esbarra no "Always Use HTTPS" e em cache. Pelo DNS funciona
+      # independente do estado da nuvem laranja.
+      - --certificatesresolvers.le.acme.dnschallenge=true
+      - --certificatesresolvers.le.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.le.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+      # Para testar sem gastar o limite do Let's Encrypt (5 falhas/hora):
+      # descomente, suba, valide, comente de novo e apague o volume
+      # traefik_acme antes de emitir o certificado de verdade.
+      # - --certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+      - --log.level=INFO
+      - --accesslog=true
+    environment:
+      # Token da Cloudflare com permissão Zone:DNS:Edit — só para o DNS-01.
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_acme:/acme
+    labels:
+      # Só definições de middleware — o Traefik não expõe rota própria.
+      - traefik.enable=true
+      - traefik.http.middlewares.security-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.security-headers.headers.frameDeny=true
+      - traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin
+      - traefik.http.middlewares.compress.compress=true
+      # Equivale ao limit_req do nginx: 20 req/s por IP, rajada de 40.
+      - traefik.http.middlewares.api-ratelimit.ratelimit.average=20
+      - traefik.http.middlewares.api-ratelimit.ratelimit.burst=40
+      # Equivale ao client_max_body_size 10m do nginx.
+      - traefik.http.middlewares.api-bodylimit.buffering.maxRequestBodyBytes=10485760
+      - traefik.http.middlewares.api-bodylimit.buffering.memRequestBodyBytes=2097152
+      # www → domínio principal.
+      - traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\.oasisaraguaia\.com\.br/?(.*)
+      - traefik.http.middlewares.www-redirect.redirectregex.replacement=https://oasisaraguaia.com.br/$${1}
+      - traefik.http.middlewares.www-redirect.redirectregex.permanent=true
+    networks:
+      - web
+
   backend:
     build:
       context: ./backend
@@ -53,8 +118,20 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=oais_web
+      # Prioridade explícita: sem ela a disputa entre `/` e `/api` depende
+      # do tamanho da regra, que é frágil.
+      - traefik.http.routers.backend.rule=Host(`oasisaraguaia.com.br`) && PathPrefix(`/api`)
+      - traefik.http.routers.backend.priority=100
+      - traefik.http.routers.backend.entrypoints=websecure
+      - traefik.http.routers.backend.tls.certresolver=le
+      - traefik.http.routers.backend.middlewares=security-headers@docker,compress@docker,api-ratelimit@docker,api-bodylimit@docker
+      - traefik.http.services.backend.loadbalancer.server.port=3001
     networks:
       - internal
+      - web
 
   frontend:
     build:
@@ -74,34 +151,37 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=oais_web
+      - traefik.http.routers.frontend.rule=Host(`oasisaraguaia.com.br`)
+      - traefik.http.routers.frontend.entrypoints=websecure
+      - traefik.http.routers.frontend.tls.certresolver=le
+      - traefik.http.routers.frontend.middlewares=security-headers@docker,compress@docker
+      - traefik.http.services.frontend.loadbalancer.server.port=3000
+      # Roteador só do www, apontando pro mesmo serviço: o redirect precisa
+      # acontecer depois do TLS, e o certificado cobre os dois nomes.
+      - traefik.http.routers.www.rule=Host(`www.oasisaraguaia.com.br`)
+      - traefik.http.routers.www.entrypoints=websecure
+      - traefik.http.routers.www.tls.certresolver=le
+      - traefik.http.routers.www.service=frontend
+      - traefik.http.routers.www.middlewares=www-redirect@docker
     networks:
-      - internal
-
-  nginx:
-    image: nginx:1.27-alpine
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
-      - nginx_logs:/var/log/nginx
-    depends_on:
-      frontend:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    networks:
-      - internal
+      - web
 
 volumes:
   postgres_data:
   redis_data:
   uploads_data:
   backend_logs:
-  nginx_logs:
+  traefik_acme:
 
 networks:
+  # Nomes fixos: o Traefik precisa saber por qual rede falar com o backend,
+  # que está em duas. Sem nome fixo o prefixo do projeto entra no meio.
+  web:
+    name: oais_web
+    driver: bridge
   internal:
+    name: oais_internal
     driver: bridge
