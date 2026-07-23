@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Backup do Oaís do Araguaia: dump do Postgres + tarball dos uploads.
+# Backup do Oásis do Araguaia: dump do Postgres + tarball dos uploads.
 # Feito para rodar via cron na VPS. Exemplo (03:10 todo dia):
 #
 #   10 3 * * * /opt/oais-do-araguaia/scripts/backup.sh >> /var/log/oais-backup.log 2>&1

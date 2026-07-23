@@ -149,11 +149,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="border-b border-hairline px-5 py-5 flex items-center gap-3">
           <img
             src={LOGO_SRC}
-            alt="Logo Oasís do Araguaia"
+            alt="Logo Oásis do Araguaia"
             className="size-10 object-contain"
           />
           <div className="min-w-0">
-            <span className="text-base font-bold text-primary block leading-tight">Oasís do Araguaia</span>
+            <span className="text-base font-bold text-primary block leading-tight">Oásis do Araguaia</span>
             <p className="text-[10px] text-muted">Condomínio de chalés</p>
           </div>
         </div>
@@ -183,7 +183,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   alt=""
                   className="size-9 shrink-0 object-contain"
                 />
-                <span className="truncate font-bold text-primary">Oasís do Araguaia</span>
+                <span className="truncate font-bold text-primary">Oásis do Araguaia</span>
               </div>
               <button
                 onClick={() => setMenuOpen(false)}
@@ -212,10 +212,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex min-w-0 items-center gap-2">
             <img
               src={LOGO_SRC}
-              alt="Logo Oasís do Araguaia"
+              alt="Logo Oásis do Araguaia"
               className="size-8 shrink-0 object-contain"
             />
-            <span className="truncate font-bold text-primary">Oasís do Araguaia</span>
+            <span className="truncate font-bold text-primary">Oásis do Araguaia</span>
           </div>
           <div className="flex shrink-0 items-center">
             <Link

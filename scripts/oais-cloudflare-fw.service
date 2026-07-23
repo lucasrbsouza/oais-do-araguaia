@@ -2,7 +2,7 @@
 # As regras iptables somem no reboot; a cadeia DOCKER-USER só existe depois que
 # o Docker sobe — por isso After=docker.service. Instalação em docs/DEPLOY.md.
 [Unit]
-Description=Restringe 80/443 do Oaís às faixas da Cloudflare (DOCKER-USER)
+Description=Restringe 80/443 do Oásis às faixas da Cloudflare (DOCKER-USER)
 After=docker.service
 Requires=docker.service
 

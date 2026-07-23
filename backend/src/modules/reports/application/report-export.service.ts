@@ -304,7 +304,7 @@ export class ReportExportService {
 
   private async buildXlsx(data: EventExportData): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Oasís do Araguaia';
+    workbook.creator = 'Oásis do Araguaia';
     const sheet = workbook.addWorksheet(data.eventName.slice(0, 31), {
       pageSetup: { orientation: 'landscape', fitToPage: true },
     });
@@ -762,7 +762,7 @@ export class ReportExportService {
         .fontSize(8)
         .fillColor('#888888')
         .text(
-          `Gerado pelo sistema Oasís do Araguaia em ${new Intl.DateTimeFormat(
+          `Gerado pelo sistema Oásis do Araguaia em ${new Intl.DateTimeFormat(
             'pt-BR',
             { dateStyle: 'short', timeStyle: 'short' },
           ).format(new Date())}`,

@@ -22,11 +22,11 @@ const BACKGROUND_ROWS = [
   {
     offset: "-translate-x-16",
     cards: [
-      { label: "Oasis Do Araguaia", color: "from-teal-400 to-teal-500" },
+      { label: "Oásis do Araguaia", color: "from-teal-400 to-teal-500" },
       { label: "Pará", color: "from-blue-400 to-blue-500" },
       { label: "Araguaia", color: "from-emerald-400 to-emerald-500" },
       { label: "Rio", color: "from-amber-400 to-amber-500" },
-      { label: "Oasis Do Araguaia", color: "from-rose-400 to-rose-500" },
+      { label: "Oásis do Araguaia", color: "from-rose-400 to-rose-500" },
       { label: "Pará", color: "from-indigo-400 to-indigo-500" },
     ],
   },
@@ -35,7 +35,7 @@ const BACKGROUND_ROWS = [
     cards: [
       { label: "Pará", color: "from-rose-400 to-rose-500" },
       { label: "Rio", color: "from-orange-400 to-orange-500" },
-      { label: "Oasis Do Araguaia", color: "from-teal-400 to-teal-500" },
+      { label: "Oásis do Araguaia", color: "from-teal-400 to-teal-500" },
       { label: "Araguaia", color: "from-cyan-400 to-cyan-500" },
       { label: "Pará", color: "from-blue-400 to-blue-500" },
       { label: "Rio", color: "from-amber-400 to-amber-500" },
@@ -45,10 +45,10 @@ const BACKGROUND_ROWS = [
     offset: "-translate-x-8",
     cards: [
       { label: "Araguaia", color: "from-emerald-400 to-emerald-500" },
-      { label: "Oasis Do Araguaia", color: "from-indigo-400 to-indigo-500" },
+      { label: "Oásis do Araguaia", color: "from-indigo-400 to-indigo-500" },
       { label: "Rio", color: "from-orange-400 to-orange-500" },
       { label: "Pará", color: "from-rose-400 to-rose-500" },
-      { label: "Oasis Do Araguaia", color: "from-teal-400 to-teal-500" },
+      { label: "Oásis do Araguaia", color: "from-teal-400 to-teal-500" },
       { label: "Araguaia", color: "from-cyan-400 to-cyan-500" },
     ],
   },
@@ -57,7 +57,7 @@ const BACKGROUND_ROWS = [
     cards: [
       { label: "Rio", color: "from-amber-400 to-amber-500" },
       { label: "Pará", color: "from-blue-400 to-blue-500" },
-      { label: "Oasis Do Araguaia", color: "from-rose-400 to-rose-500" },
+      { label: "Oásis do Araguaia", color: "from-rose-400 to-rose-500" },
       { label: "Araguaia", color: "from-emerald-400 to-emerald-500" },
       { label: "Rio", color: "from-orange-400 to-orange-500" },
       { label: "Pará", color: "from-indigo-400 to-indigo-500" },
@@ -121,11 +121,11 @@ export default function LoginPage() {
         <div className="flex items-center gap-3 mb-6">
           <img
             src={LOGO_SRC}
-            alt="Logo Oasís do Araguaia"
+            alt="Logo Oásis do Araguaia"
             className="size-12 shrink-0 object-contain"
           />
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-ink leading-tight">Oasís do Araguaia</h1>
+            <h1 className="text-2xl font-bold text-ink leading-tight">Oásis do Araguaia</h1>
             <p className="text-xs text-muted">
               Gestão do condomínio de chalés
             </p>

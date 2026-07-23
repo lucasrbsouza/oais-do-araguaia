@@ -45,7 +45,7 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Oasís do Araguaia API')
+    .setTitle('Oásis do Araguaia API')
     .setDescription(
       'Gestão de condomínio de chalés: reservas, compras, rateio e pagamentos.',
     )

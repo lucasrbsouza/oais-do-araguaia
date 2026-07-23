@@ -1,4 +1,4 @@
-# Oasís do Araguaia — Gestão de Condomínio de Chalés
+# Oásis do Araguaia — Gestão de Condomínio de Chalés
 
 Aplicação web que substitui as planilhas de administração de um condomínio de 11 chalés:
 reservas por final de semana (**Eventos**), compras com comprovantes, **rateio automático

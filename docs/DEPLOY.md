@@ -1,4 +1,4 @@
-# Deploy — Oaís do Araguaia
+# Deploy — Oásis do Araguaia
 
 Produção em VPS única (Hostinger KVM 2, Ubuntu 24.04 LTS), Docker Compose,
 Traefik na borda com TLS automático do Let's Encrypt, atrás do proxy da
