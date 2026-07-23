@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
+import { ChaletsModule } from '../chalets/chalets.module';
 import { FileStorage } from '../purchases/domain/file-storage';
 import { LocalFileStorage } from '../purchases/infrastructure/local-file-storage';
 import { CreateUserUseCase } from './application/use-cases/create-user.use-case';
@@ -17,6 +18,7 @@ import { PrismaUserRepository } from './infrastructure/prisma-user.repository';
 import { UsersController } from './presentation/users.controller';
 
 @Module({
+  imports: [forwardRef(() => ChaletsModule)],
   controllers: [UsersController],
   providers: [
     { provide: UserRepository, useClass: PrismaUserRepository },

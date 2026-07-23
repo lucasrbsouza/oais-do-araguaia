@@ -92,6 +92,12 @@ const makeChaletRepo = (ownerId: string | null = 'owner'): ChaletRepository =>
     findById: jest
       .fn()
       .mockResolvedValue({ id: 'c1', number: 1, ownerId, owner: null }),
+    isOwnerOrMember: jest
+      .fn()
+      .mockImplementation((userId) => Promise.resolve(ownerId === userId)),
+    findAccessibleByUser: jest
+      .fn()
+      .mockResolvedValue([{ id: 'c1', number: 1, ownerId, owner: null }]),
   }) as unknown as ChaletRepository;
 
 const validInput = {
@@ -286,10 +292,7 @@ describe('UpdateReservationUseCase', () => {
     const useCase = new UpdateReservationUseCase(repo, makeEventRepo());
     // r1 sai de 04–05 (livre) e tenta ir para 05–06, onde já há 3 entradas.
     await expect(
-      useCase.execute(
-        { id: 'r1', checkIn: new Date('2030-01-05') },
-        admin,
-      ),
+      useCase.execute({ id: 'r1', checkIn: new Date('2030-01-05') }, admin),
     ).rejects.toThrow(ConflictError);
   });
 });

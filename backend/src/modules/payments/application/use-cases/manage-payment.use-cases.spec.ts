@@ -91,12 +91,11 @@ const purchaseRepoWithAdvances = {
 const chaletRepo = {
   findById: jest.fn().mockResolvedValue({ id: 'c1' }),
   findByOwner: jest.fn().mockResolvedValue([{ id: 'c1' }]),
-  list: jest
-    .fn()
-    .mockResolvedValue([
-      { id: 'c1', owner: { id: 'owner', name: 'Owner' } },
-      { id: 'c2', owner: null },
-    ]),
+  findAccessibleByUser: jest.fn().mockResolvedValue([{ id: 'c1' }]),
+  list: jest.fn().mockResolvedValue([
+    { id: 'c1', owner: { id: 'owner', name: 'Owner' } },
+    { id: 'c2', owner: null },
+  ]),
 } as unknown as ChaletRepository;
 
 const eventRepo = {
@@ -197,6 +196,7 @@ describe('GetEventPaymentsUseCase', () => {
       {
         ...chaletRepo,
         findByOwner: jest.fn().mockResolvedValue([]),
+        findAccessibleByUser: jest.fn().mockResolvedValue([]),
       } as unknown as ChaletRepository,
     );
     await expect(useCase.execute('e1', owner)).rejects.toThrow(ForbiddenError);

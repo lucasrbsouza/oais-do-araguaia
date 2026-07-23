@@ -15,6 +15,7 @@ import { UserAvatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
+import { CredentialsDialog, type NewCredentials } from "@/components/credentials-dialog";
 import { Field, PasswordField, PhoneField, SelectField } from "@/components/ui/input";
 import { Table, Td, Th } from "@/components/ui/table";
 import { ErrorState, TableSkeleton } from "@/components/ui/states";
@@ -25,18 +26,13 @@ const schema = z.object({
   password: z.string().min(8, "Mínimo de 8 caracteres."),
   role: z.enum(["ADMIN", "OWNER"]),
   phone: z.string().max(20, "Máximo 20 caracteres.").optional().or(z.literal("")),
-  /** Vínculo opcional: chalé ainda sem proprietário, atribuído ao novo usuário. */
+  /** Vínculo opcional: chalé ainda sem proprietário, atribuído como DONO ao novo usuário. */
   chaletId: z.string().optional(),
+  /** Vínculo opcional: chalé ao qual o usuário pertencerá como FAMILIAR. */
+  memberChaletId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
-
-/** Credenciais que o admin repassa ao novo usuário. */
-interface NewCredentials {
-  name: string;
-  email: string;
-  password: string;
-}
 
 const SITE_URL = "https://oasisaraguaia.com.br";
 
@@ -63,20 +59,22 @@ export default function UsersPage() {
     enabled: isAdmin,
   });
 
-  // Só faz sentido oferecer chalé que ainda não tem dono.
-  const availableChalets = chalets?.filter((c) => c.owner === null) ?? [];
+  // Chalés que ainda não têm dono (para atribuição de Proprietário).
+  const availableOwnerChalets = chalets?.filter((c) => c.owner === null) ?? [];
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { role: "OWNER", chaletId: "" },
+    defaultValues: { role: "OWNER", chaletId: "", memberChaletId: "" },
   });
 
   const createMutation = useMutation({
-    mutationFn: async ({ chaletId, ...data }: FormData) => {
-      const created = await api<UserItem>("/users", { method: "POST", body: data });
+    mutationFn: async ({ chaletId, memberChaletId, ...data }: FormData) => {
+      const payload = {
+        ...data,
+        ...(memberChaletId ? { memberChaletId } : {}),
+      };
+      const created = await api<UserItem>("/users", { method: "POST", body: payload });
       if (chaletId) {
-        // Dois passos porque o vínculo é do chalé: se falhar, o usuário já existe
-        // e o admin refaz o vínculo pela tela de chalés — daí a mensagem abaixo.
         try {
           await api<Chalet>(`/chalets/${chaletId}`, {
             method: "PATCH",
@@ -84,7 +82,7 @@ export default function UsersPage() {
           });
         } catch (err) {
           throw new Error(
-            `Usuário criado, mas o chalé não pôde ser vinculado: ${(err as Error).message} ` +
+            `Usuário criado, mas o chalé como dono não pôde ser vinculado: ${(err as Error).message} ` +
               "Vincule pela tela de Chalés.",
           );
         }
@@ -101,10 +99,9 @@ export default function UsersPage() {
         email: variables.email,
         password: variables.password,
       });
-      form.reset({ role: "OWNER", phone: "", chaletId: "" });
+      form.reset({ role: "OWNER", phone: "", chaletId: "", memberChaletId: "" });
     },
     onError: (err: Error) => {
-      // O usuário pode ter sido criado mesmo com erro no vínculo do chalé.
       void queryClient.invalidateQueries({ queryKey: ["users"] });
       void queryClient.invalidateQueries({ queryKey: ["chalets"] });
       setFormError(err.message);
@@ -251,20 +248,25 @@ export default function UsersPage() {
               error={form.formState.errors.phone?.message}
               {...form.register("phone")}
             />
-            {availableChalets.length > 0 ? (
-              <SelectField label="Chalé (opcional)" {...form.register("chaletId")}>
-                <option value="">Nenhum por enquanto</option>
-                {availableChalets.map((c) => (
+            {chalets && chalets.length > 0 && (
+              <SelectField label="Vincular como Familiar de Chalé (opcional)" {...form.register("memberChaletId")}>
+                <option value="">Nenhum chalé (apenas usuário)</option>
+                {chalets.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.number} — {c.name}
+                    Chalé {c.number} — {c.name}
                   </option>
                 ))}
               </SelectField>
-            ) : (
-              <p className="text-xs text-muted">
-                Nenhum chalé sem proprietário no momento. O vínculo pode ser feito depois,
-                na tela de Chalés.
-              </p>
+            )}
+            {availableOwnerChalets.length > 0 && (
+              <SelectField label="Definir como Proprietário do Chalé (opcional)" {...form.register("chaletId")}>
+                <option value="">Sem chalé sob sua propriedade</option>
+                {availableOwnerChalets.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    Chalé {c.number} — {c.name}
+                  </option>
+                ))}
+              </SelectField>
             )}
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
@@ -301,80 +303,6 @@ export default function UsersPage() {
           loading={deleteMutation.isPending}
         />
       )}
-    </div>
-  );
-}
-
-function CredentialsDialog({
-  credentials,
-  onClose,
-}: {
-  credentials: NewCredentials;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const message =
-    `Olá, ${credentials.name}! Seu acesso ao sistema do condomínio Oásis do Araguaia está pronto.\n\n` +
-    `Site: ${SITE_URL}\n` +
-    `E-mail: ${credentials.email}\n` +
-    `Senha provisória: ${credentials.password}\n\n` +
-    "Ao entrar pela primeira vez, o sistema vai pedir para você criar uma nova senha.";
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(message);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      // Alguns navegadores bloqueiam a Clipboard API fora de HTTPS ou de um
-      // gesto do usuário; nesse caso o admin ainda pode selecionar o texto.
-    }
-  }
-
-  return (
-    <Dialog open onClose={onClose} title="Usuário criado com sucesso">
-      <div className="space-y-5">
-        <div className="flex items-start gap-3 rounded-md bg-success/10 p-3 text-sm text-body">
-          <CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden />
-          <p>
-            Envie os dados de acesso abaixo para <strong>{credentials.name}</strong>.
-            A senha é provisória: será trocada no primeiro acesso.
-          </p>
-        </div>
-
-        <dl className="space-y-2">
-          <CredentialRow label="Site" value={SITE_URL} />
-          <CredentialRow label="E-mail" value={credentials.email} />
-          <CredentialRow label="Senha provisória" value={credentials.password} />
-        </dl>
-
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <Button variant="secondary" onClick={onClose}>
-            Concluir
-          </Button>
-          <Button onClick={copy}>
-            {copied ? (
-              <>
-                <Check className="size-4" aria-hidden /> Copiado!
-              </>
-            ) : (
-              <>
-                <Copy className="size-4" aria-hidden /> Copiar informações
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
-function CredentialRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-hairline bg-surface-soft px-3 py-2">
-      <dt className="text-xs font-medium text-muted">{label}</dt>
-      <dd className="mt-0.5 break-all font-mono text-sm text-ink">{value}</dd>
     </div>
   );
 }

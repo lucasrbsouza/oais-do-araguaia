@@ -65,13 +65,14 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  chalets       Chalet[]
-  reservations  Reservation[]
-  purchases     Purchase[]
-  payments      Payment[]
-  refreshTokens RefreshToken[]
-  auditLogs     AuditLog[]
-  closedEvents  Event[]        @relation("EventClosedBy")
+  chalets           Chalet[]
+  chaletMemberships ChaletMember[]
+  reservations      Reservation[]
+  purchases         Purchase[]
+  payments          Payment[]
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  closedEvents      Event[]        @relation("EventClosedBy")
 
   @@map("users")
 }
@@ -100,6 +101,7 @@ model Chalet {
   updatedAt DateTime     @updatedAt @map("updated_at")
 
   owner           User?            @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  members         ChaletMember[]
   reservations    Reservation[]
   settlementItems SettlementItem[]
   payments        Payment[]
@@ -107,6 +109,21 @@ model Chalet {
   receivables     Receivable[]
 
   @@map("chalets")
+}
+
+model ChaletMember {
+  id        String   @id @default(uuid())
+  chaletId  String   @map("chalet_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  chalet Chalet @relation(fields: [chaletId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chaletId, userId])
+  @@index([userId])
+  @@index([chaletId])
+  @@map("chalet_members")
 }
 
 model Event {

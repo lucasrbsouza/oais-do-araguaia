@@ -10,9 +10,12 @@ import {
   ChaletWithOwner,
 } from '../../domain/chalet.repository';
 import {
+  AddChaletMemberUseCase,
   CreateChaletUseCase,
   DeleteChaletUseCase,
+  ListChaletMembersUseCase,
   ListChaletsUseCase,
+  RemoveChaletMemberUseCase,
   UpdateChaletUseCase,
 } from './manage-chalet.use-cases';
 
@@ -49,6 +52,12 @@ const makeChaletRepo = (
   update: jest.fn().mockResolvedValue(chalet),
   list: jest.fn().mockResolvedValue([chalet]),
   findByOwner: jest.fn().mockResolvedValue([]),
+  findAccessibleByUser: jest.fn().mockResolvedValue([chalet]),
+  isOwnerOrMember: jest.fn().mockResolvedValue(false),
+  listMembers: jest.fn().mockResolvedValue([]),
+  addMember: jest.fn().mockResolvedValue(undefined),
+  removeMember: jest.fn().mockResolvedValue(undefined),
+  countMembers: jest.fn().mockResolvedValue(0),
   hasHistory: jest.fn().mockResolvedValue(false),
   delete: jest.fn().mockResolvedValue(undefined),
   ...overrides,
@@ -173,5 +182,39 @@ describe('ListChaletsUseCase', () => {
     const useCase = new ListChaletsUseCase(makeChaletRepo());
     const result = await useCase.execute();
     expect(result[0]).toMatchObject({ number: 1, owner: null });
+  });
+});
+
+describe('ChaletMembersUseCases', () => {
+  it('dono ou admin pode listar membros', async () => {
+    const repo = makeChaletRepo({
+      isOwnerOrMember: jest.fn().mockResolvedValue(true),
+      listMembers: jest
+        .fn()
+        .mockResolvedValue([{ id: 'u2', name: 'Familiar' }]),
+    });
+    const useCase = new ListChaletMembersUseCase(repo);
+    const members = await useCase.execute('c1', owner);
+    expect(members).toHaveLength(1);
+  });
+
+  it('adiciona familiar respeitando limite de 4 familiares', async () => {
+    const repo = makeChaletRepo({
+      countMembers: jest.fn().mockResolvedValue(4),
+    });
+    const useCase = new AddChaletMemberUseCase(repo, makeUserRepo());
+    await expect(
+      useCase.execute(
+        { chaletId: 'c1', name: 'Fam', email: 'f@f.com', password: 'pass' },
+        owner,
+      ),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('dono pode remover familiar', async () => {
+    const repo = makeChaletRepo();
+    const useCase = new RemoveChaletMemberUseCase(repo);
+    await useCase.execute('c1', 'u2', owner);
+    expect(repo.removeMember).toHaveBeenCalledWith('c1', 'u2');
   });
 });

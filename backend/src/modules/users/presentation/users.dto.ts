@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -36,6 +37,11 @@ export class CreateUserDto {
   @IsString()
   @MaxLength(20)
   phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  memberChaletId?: string;
 }
 
 export class UpdateUserDto {

@@ -180,10 +180,15 @@ export class ReportsQueryService {
     if (!chalet) {
       throw new NotFoundError('Chalé não encontrado.');
     }
-    if (user.role !== Role.ADMIN && chalet.ownerId !== user.id) {
-      throw new ForbiddenError(
-        'Você só pode ver relatórios do seu próprio chalé.',
-      );
+    if (user.role !== Role.ADMIN) {
+      const isMember = await this.prisma.chaletMember.findUnique({
+        where: { chaletId_userId: { chaletId, userId: user.id } },
+      });
+      if (chalet.ownerId !== user.id && !isMember) {
+        throw new ForbiddenError(
+          'Você só pode ver relatórios do seu próprio chalé.',
+        );
+      }
     }
 
     const event = await this.prisma.event.findUnique({

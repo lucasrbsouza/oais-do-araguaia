@@ -105,7 +105,9 @@ export class GetEventPaymentsUseCase {
 
     let items = settlement.items;
     if (user.role !== Role.ADMIN) {
-      const ownChalets = await this.chaletRepository.findByOwner(user.id);
+      const ownChalets = await this.chaletRepository.findAccessibleByUser(
+        user.id,
+      );
       const ownIds = new Set(ownChalets.map((c) => c.id));
       items = items.filter((item) => ownIds.has(item.chaletId));
       if (items.length === 0) {

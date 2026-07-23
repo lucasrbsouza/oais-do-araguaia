@@ -125,6 +125,13 @@ interface DbPayment {
   notes: string | null;
 }
 
+interface DbChaletMember {
+  id: string;
+  chaletId: string;
+  userId: string;
+  createdAt: string;
+}
+
 interface DbAudit {
   id: string;
   userId: string | null;
@@ -139,6 +146,7 @@ interface DbAudit {
 interface Db {
   users: DbUser[];
   chalets: DbChalet[];
+  chaletMembers?: DbChaletMember[];
   events: DbEvent[];
   reservations: DbReservation[];
   purchases: DbPurchase[];
@@ -248,6 +256,7 @@ function seed(): Db {
   return {
     users,
     chalets,
+    chaletMembers: [],
     events,
     reservations,
     purchases,
@@ -278,10 +287,11 @@ function loadDb(): Db {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const db = JSON.parse(raw) as Db;
-      // bancos salvos antes das contas a receber / auditoria
+      // bancos salvos antes das contas a receber / auditoria / membros de chalé
       db.receivables ??= [];
       db.audit ??= [];
       db.userSeq ??= 0;
+      db.chaletMembers ??= [];
       return db;
     }
   } catch {
@@ -513,17 +523,48 @@ function computeSettlement(db: Db, eventId: string): DbSettlement {
   };
 }
 
+function isChaletOwnerOrMember(db: Db, chaletId: string, userId: string): boolean {
+  const chalet = db.chalets.find((c) => c.id === chaletId);
+  if (!chalet) return false;
+  if (chalet.ownerId === userId) return true;
+  return (db.chaletMembers ?? []).some(
+    (m) => m.chaletId === chaletId && m.userId === userId,
+  );
+}
+
+function findAccessibleChalets(db: Db, userId: string): DbChalet[] {
+  const memberChaletIds = new Set(
+    (db.chaletMembers ?? [])
+      .filter((m) => m.userId === userId)
+      .map((m) => m.chaletId),
+  );
+  return db.chalets.filter(
+    (c) => c.ownerId === userId || memberChaletIds.has(c.id),
+  );
+}
+
 // ── Mapeadores de resposta (mesmo shape da API real) ────────────────
 
-const chaletResponse = (db: Db, c: DbChalet) => ({
-  id: c.id,
-  number: c.number,
-  name: c.name,
-  status: c.status,
-  owner: c.ownerId
-    ? { id: c.ownerId, name: db.users.find((u) => u.id === c.ownerId)?.name ?? "?" }
-    : null,
-});
+const chaletResponse = (db: Db, c: DbChalet) => {
+  const chaletMembers = (db.chaletMembers ?? []).filter((m) => m.chaletId === c.id);
+  const members = chaletMembers
+    .map((m) => {
+      const u = db.users.find((user) => user.id === m.userId);
+      return u ? { id: u.id, name: u.name } : null;
+    })
+    .filter((m): m is { id: string; name: string } => m !== null);
+
+  return {
+    id: c.id,
+    number: c.number,
+    name: c.name,
+    status: c.status,
+    owner: c.ownerId
+      ? { id: c.ownerId, name: db.users.find((u) => u.id === c.ownerId)?.name ?? "?" }
+      : null,
+    members,
+  };
+};
 
 const reservationResponse = (db: Db, r: DbReservation) => {
   const chalet = db.chalets.find((c) => c.id === r.chaletId);
@@ -884,6 +925,8 @@ const AUDIT_ROUTES: Array<{
   { method: "PATCH", pattern: /^\/users\/([^/]+)$/, action: "USER_UPDATED", entity: "User" },
   { method: "DELETE", pattern: /^\/users\/([^/]+)$/, action: "USER_DELETED", entity: "User" },
   { method: "POST", pattern: /^\/chalets$/, action: "CHALET_CREATED", entity: "Chalet" },
+  { method: "POST", pattern: /^\/chalets\/([^/]+)\/members$/, action: "CHALET_MEMBER_ADDED", entity: "Chalet" },
+  { method: "DELETE", pattern: /^\/chalets\/([^/]+)\/members\/([^/]+)$/, action: "CHALET_MEMBER_REMOVED", entity: "Chalet" },
   { method: "PATCH", pattern: /^\/chalets\/([^/]+)$/, action: "CHALET_UPDATED", entity: "Chalet" },
   { method: "DELETE", pattern: /^\/chalets\/([^/]+)$/, action: "CHALET_DELETED", entity: "Chalet" },
   { method: "POST", pattern: /^\/events$/, action: "EVENT_CREATED", entity: "Event" },
@@ -991,7 +1034,7 @@ function route(db: Db, req: DemoRequest): unknown {
     const chalet = db.chalets.find((c) => c.id === seg[1]);
     if (!chalet) throw new DemoApiError(404, "Chalé não encontrado.");
     if (method === "PATCH") {
-      if (!isAdmin && chalet.ownerId !== user.id) {
+      if (!isAdmin && !isChaletOwnerOrMember(db, chalet.id, user.id)) {
         throw new DemoApiError(403, "Você só pode editar o seu próprio chalé.");
       }
       if (body.name) chalet.name = String(body.name);
@@ -1013,6 +1056,102 @@ function route(db: Db, req: DemoRequest): unknown {
         );
       }
       db.chalets = db.chalets.filter((c) => c.id !== chalet.id);
+      return undefined;
+    }
+  }
+
+  if (seg[0] === "chalets" && seg[2] === "members") {
+    const chaletId = seg[1];
+    const chalet = db.chalets.find((c) => c.id === chaletId);
+    if (!chalet) throw new DemoApiError(404, "Chalé não encontrado.");
+    const isOwnerOrMember = isChaletOwnerOrMember(db, chaletId, user.id);
+
+    if (method === "GET") {
+      if (!isAdmin && !isOwnerOrMember) {
+        throw new DemoApiError(403, "Você só pode ver os membros do seu próprio chalé.");
+      }
+      const memberList = (db.chaletMembers ?? []).filter((m) => m.chaletId === chaletId);
+      return memberList.map((m) => {
+        const u = db.users.find((usr) => usr.id === m.userId);
+        return {
+          id: m.userId,
+          name: u?.name ?? "Familiar",
+          email: u?.email ?? "",
+          phone: u?.phone ?? null,
+          createdAt: m.createdAt,
+        };
+      });
+    }
+
+    if (method === "POST") {
+      const isOwner = chalet.ownerId === user.id;
+      if (!isAdmin && !isOwner) {
+        throw new DemoApiError(403, "Somente o proprietário ou administrador pode adicionar familiares.");
+      }
+      const currentCount = (db.chaletMembers ?? []).filter((m) => m.chaletId === chaletId).length;
+      if (currentCount >= 4) {
+        throw new DemoApiError(409, "Este chalé já atingiu o limite de 5 usuários (1 dono + 4 familiares).");
+      }
+
+      let newUser: DbUser | undefined;
+
+      if (body.userId) {
+        newUser = db.users.find((u) => u.id === body.userId);
+        if (!newUser) throw new DemoApiError(404, "Usuário não encontrado.");
+      } else if (body.email) {
+        newUser = db.users.find((u) => u.email === body.email);
+        if (!newUser) {
+          if (!body.name || !body.password) {
+            throw new DemoApiError(400, "Nome e senha são obrigatórios para criar novo usuário.");
+          }
+          if (db.users.some((u) => u.name === body.name)) {
+            throw new DemoApiError(409, "Já existe um usuário com este nome.");
+          }
+          db.userSeq = (db.userSeq ?? 0) + 1;
+          newUser = {
+            id: `u${db.userSeq}`,
+            name: String(body.name),
+            email: String(body.email),
+            password: String(body.password),
+            role: "OWNER",
+            active: true,
+            phone: body.phone ? String(body.phone) : null,
+            mustChangePassword: true,
+            createdAt: new Date().toISOString(),
+          };
+          db.users.push(newUser);
+        }
+      } else {
+        throw new DemoApiError(400, "Informe um usuário existente ou dados para cadastro.");
+      }
+
+      if (chalet.ownerId === newUser.id) {
+        throw new DemoApiError(409, "O proprietário do chalé não pode ser adicionado como familiar.");
+      }
+      if (isChaletOwnerOrMember(db, chaletId, newUser.id)) {
+        throw new DemoApiError(409, "Este usuário já é membro deste chalé.");
+      }
+
+      db.chaletMembers ??= [];
+      db.chaletMembers.push({
+        id: uid(),
+        chaletId,
+        userId: newUser.id,
+        createdAt: new Date().toISOString(),
+      });
+
+      return { id: newUser.id, name: newUser.name, email: newUser.email };
+    }
+
+    if (seg.length === 4 && method === "DELETE") {
+      const memberUserId = seg[3];
+      const isOwner = chalet.ownerId === user.id;
+      if (!isAdmin && !isOwner) {
+        throw new DemoApiError(403, "Somente o proprietário ou administrador pode remover familiares.");
+      }
+      db.chaletMembers = (db.chaletMembers ?? []).filter(
+        (m) => !(m.chaletId === chaletId && m.userId === memberUserId),
+      );
       return undefined;
     }
   }
@@ -1476,6 +1615,22 @@ function route(db: Db, req: DemoRequest): unknown {
       createdAt: new Date().toISOString(),
     };
     db.users.push(created);
+    if (body.memberChaletId) {
+      const chaletId = String(body.memberChaletId);
+      const chalet = db.chalets.find((c) => c.id === chaletId);
+      if (!chalet) throw new DemoApiError(404, "Chalé não encontrado.");
+      const count = (db.chaletMembers ?? []).filter((m) => m.chaletId === chaletId).length;
+      if (count >= 4) {
+        throw new DemoApiError(409, "Este chalé já atingiu o limite de 5 usuários (1 dono + 4 familiares).");
+      }
+      db.chaletMembers ??= [];
+      db.chaletMembers.push({
+        id: uid(),
+        chaletId,
+        userId: created.id,
+        createdAt: new Date().toISOString(),
+      });
+    }
     return userResponse(created);
   }
   if (seg[0] === "users" && seg.length === 2 && method === "PATCH") {

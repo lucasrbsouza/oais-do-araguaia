@@ -62,6 +62,7 @@ export interface Chalet {
   name: string;
   status: ChaletStatus;
   owner: { id: string; name: string } | null;
+  members?: Array<{ id: string; name: string }>;
 }
 
 export interface EventItem {

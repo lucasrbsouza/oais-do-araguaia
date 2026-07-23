@@ -52,7 +52,9 @@ export class ListEventReceivablesUseCase {
   ): Promise<ReceivableResponse[]> {
     let receivables = await this.receivableRepository.listByEvent(eventId);
     if (user.role !== Role.ADMIN) {
-      const ownChalets = await this.chaletRepository.findByOwner(user.id);
+      const ownChalets = await this.chaletRepository.findAccessibleByUser(
+        user.id,
+      );
       const ownIds = new Set(ownChalets.map((c) => c.id));
       receivables = receivables.filter((r) => ownIds.has(r.chaletId));
     }
@@ -87,7 +89,9 @@ export class ListOpenReceivablesUseCase {
   async execute(user: AuthenticatedUser): Promise<ReceivableResponse[]> {
     let receivables = await this.receivableRepository.listOpen();
     if (user.role !== Role.ADMIN) {
-      const ownChalets = await this.chaletRepository.findByOwner(user.id);
+      const ownChalets = await this.chaletRepository.findAccessibleByUser(
+        user.id,
+      );
       const ownIds = new Set(ownChalets.map((c) => c.id));
       receivables = receivables.filter((r) => ownIds.has(r.chaletId));
       if (receivables.length === 0) {

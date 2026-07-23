@@ -167,11 +167,8 @@ export class ReservationsController {
   ) {}
 
   @Get()
-  list(
-    @Query() query: ListReservationsQuery,
-    @CurrentUser() user: AuthenticatedUser,
-  ): Promise<ReservationResponse[]> {
-    return this.listReservations.execute(query, user);
+  list(@Query() query: ListReservationsQuery): Promise<ReservationResponse[]> {
+    return this.listReservations.execute(query);
   }
 
   @Post()

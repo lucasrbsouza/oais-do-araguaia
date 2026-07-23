@@ -72,9 +72,7 @@ function ensureStayWithinEvent(
 
 function ensureCanManage(user: AuthenticatedUser): void {
   if (user.role !== Role.ADMIN) {
-    throw new ForbiddenError(
-      'Somente administradores podem alterar reservas.',
-    );
+    throw new ForbiddenError('Somente administradores podem alterar reservas.');
   }
 }
 
@@ -120,8 +118,13 @@ export class CreateReservationUseCase {
     if (!chalet) {
       throw new NotFoundError('Chalé não encontrado.');
     }
-    if (user.role !== Role.ADMIN && chalet.ownerId !== user.id) {
-      throw new ForbiddenError('Você só pode reservar o seu próprio chalé.');
+    if (user.role !== Role.ADMIN) {
+      const isOwnerOrMember =
+        chalet.ownerId === user.id ||
+        (await this.chaletRepository.isOwnerOrMember(user.id, chalet.id));
+      if (!isOwnerOrMember) {
+        throw new ForbiddenError('Você só pode reservar o seu próprio chalé.');
+      }
     }
 
     const activeStays =
@@ -135,9 +138,9 @@ export class CreateReservationUseCase {
     );
 
     const responsibleId =
-      user.role === Role.ADMIN && input.responsibleId
-        ? input.responsibleId
-        : user.id;
+      user.role === Role.ADMIN
+        ? input.responsibleId || chalet.ownerId || user.id
+        : (chalet.ownerId ?? user.id);
 
     const reservation = await this.reservationRepository.create({
       eventId: input.eventId,
@@ -228,9 +231,7 @@ export class CancelReservationUseCase {
 
 @Injectable()
 export class DeleteReservationUseCase {
-  constructor(
-    private readonly reservationRepository: ReservationRepository,
-  ) {}
+  constructor(private readonly reservationRepository: ReservationRepository) {}
 
   async execute(id: string): Promise<void> {
     const reservation = await this.reservationRepository.findById(id);
@@ -247,7 +248,6 @@ export class ListReservationsUseCase {
 
   async execute(
     filter: ListReservationsFilter,
-    user: AuthenticatedUser,
   ): Promise<ReservationResponse[]> {
     // Proprietário e Admin vêem todas as reservas (visão geral).
     const effectiveFilter = filter;

@@ -103,7 +103,9 @@ export class PurchaseChaletGate {
     user: AuthenticatedUser,
     requestedChaletId?: string | null,
   ): Promise<string> {
-    const ownChalets = await this.chaletRepository.findByOwner(user.id);
+    const ownChalets = await this.chaletRepository.findAccessibleByUser(
+      user.id,
+    );
     if (ownChalets.length === 0) {
       throw new ForbiddenError(
         'Você não possui chalé vinculado para lançar compras.',
@@ -131,7 +133,9 @@ export class PurchaseChaletGate {
     }
 
     if (purchase.chaletId) {
-      const ownChalets = await this.chaletRepository.findByOwner(user.id);
+      const ownChalets = await this.chaletRepository.findAccessibleByUser(
+        user.id,
+      );
       const ownIds = new Set(ownChalets.map((c) => c.id));
       if (ownIds.has(purchase.chaletId)) {
         return;

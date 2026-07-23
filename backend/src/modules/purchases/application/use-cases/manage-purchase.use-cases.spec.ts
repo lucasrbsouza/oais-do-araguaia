@@ -62,6 +62,7 @@ const makeChaletGate = (
   new PurchaseChaletGate({
     findById: jest.fn().mockResolvedValue(exists ? { id: 'c1' } : null),
     findByOwner: jest.fn().mockResolvedValue(ownChalets),
+    findAccessibleByUser: jest.fn().mockResolvedValue(ownChalets),
   } as unknown as ChaletRepository);
 
 const admin: AuthenticatedUser = {
