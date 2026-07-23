@@ -1,0 +1,16 @@
+# Reaplica as regras de firewall da Cloudflare (cadeia DOCKER-USER) a cada boot.
+# As regras iptables somem no reboot; a cadeia DOCKER-USER só existe depois que
+# o Docker sobe — por isso After=docker.service. Instalação em docs/DEPLOY.md.
+[Unit]
+Description=Restringe 80/443 do Oaís às faixas da Cloudflare (DOCKER-USER)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/oais-do-araguaia/scripts/cloudflare-ips.sh
+# Se a Cloudflare estiver inacessível no boot, não derruba o boot.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target

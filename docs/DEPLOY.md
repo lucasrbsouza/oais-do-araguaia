@@ -204,22 +204,50 @@ Pontos de atenção no `.env`:
 - `CF_DNS_API_TOKEN` é o token com escopo criado no passo 1.
 - `CLOUDFLARE_IPS` fica **em branco** — quem preenche é o script do passo 5.
 
-## 5. Faixas da Cloudflare (ufw + Traefik)
+## 5. Faixas da Cloudflare (firewall + Traefik)
 
-Este script faz as duas pontas: libera 80/443 no ufw **só** para a Cloudflare e
-escreve `CLOUDFLARE_IPS` no `.env`, que o Traefik usa em
-`forwardedHeaders.trustedIPs` para saber de quem aceitar `X-Forwarded-For`.
+O script restringe as portas 80/443 às faixas da Cloudflare e escreve
+`CLOUDFLARE_IPS` no `.env`, que o Traefik usa em `forwardedHeaders.trustedIPs`
+para saber de quem aceitar `X-Forwarded-For`.
+
+O filtro **não** é feito no ufw. O Docker publica portas escrevendo iptables
+direto (cadeia `DOCKER`, avaliada antes do `INPUT` onde o ufw atua), então regra
+de ufw para 80/443 é ignorada — a origem continuaria alcançável pelo IP. O script
+usa a cadeia `DOCKER-USER`, que o Docker avalia antes das regras dele e respeita.
+Cobre IPv4 e IPv6.
+
+Suba a stack primeiro (passo 6) para o Docker criar a cadeia `DOCKER-USER`, e só
+então rode:
 
 ```bash
 sudo ./scripts/cloudflare-ips.sh
-ufw status numbered | grep cloudflare-oais | head
+sudo iptables  -L CF_FILTER -n | tail -3    # deve terminar em DROP para 80,443
+sudo ip6tables -L CF_FILTER -n | tail -3
+```
+
+Confira que a origem ficou fechada — de fora da Cloudflare, direto no IP, tem
+que dar timeout (o `--connect-timeout` evita travar):
+
+```bash
+curl -sS --connect-timeout 5 https://SEU_IP --resolve oasisaraguaia.com.br:443:SEU_IP -k \
+  && echo "AINDA ABERTO" || echo "fechado (esperado)"
 ```
 
 O script valida a resposta da Cloudflare antes de mexer no firewall: se vier
-vazia ou truncada, ele aborta sem apagar regra nenhuma. Do contrário uma falha de
-rede derrubaria o site.
+vazia ou truncada, aborta sem apagar regra nenhuma.
 
-As faixas mudam de tempos em tempos. Agende:
+### Persistência (obrigatório)
+
+Regras iptables somem no reboot, e a cadeia `DOCKER-USER` só existe depois que o
+Docker sobe. O serviço systemd reaplica na ordem certa a cada boot:
+
+```bash
+sudo cp scripts/oais-cloudflare-fw.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable oais-cloudflare-fw.service
+```
+
+As faixas também mudam de tempos em tempos — agende a atualização mensal:
 
 ```cron
 0 4 1 * * /opt/oais-do-araguaia/scripts/cloudflare-ips.sh >> /var/log/oais-cfips.log 2>&1
