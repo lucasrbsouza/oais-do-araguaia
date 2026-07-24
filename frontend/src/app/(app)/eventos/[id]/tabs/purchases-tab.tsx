@@ -59,8 +59,11 @@ export function PurchasesTab({ eventId, eventOpen }: { eventId: string; eventOpe
     queryFn: () => api<Chalet[]>("/chalets"),
   });
 
-  // Chalé do usuário: fixo para proprietário, pré-selecionado para admin.
-  const myChalet = chalets?.find((c) => c.owner?.id === user?.id);
+  // Chalé do usuário (dono ou familiar vinculado): fixo para proprietário,
+  // pré-selecionado para admin.
+  const myChalet = chalets?.find(
+    (c) => c.owner?.id === user?.id || c.members?.some((m) => m.id === user?.id)
+  );
 
   // Derivar chalés únicos das compras
   const uniqueChalets = useMemo(() => {

@@ -70,9 +70,21 @@ function ensureStayWithinEvent(
   }
 }
 
-function ensureCanManage(user: AuthenticatedUser): void {
-  if (user.role !== Role.ADMIN) {
-    throw new ForbiddenError('Somente administradores podem alterar reservas.');
+/**
+ * Admin altera qualquer reserva; proprietário e membros só as do chalé a que
+ * estão vinculados (`isOwnerOrMember` já cobre dono e membro).
+ */
+async function ensureCanManageChalet(
+  user: AuthenticatedUser,
+  chaletId: string,
+  chaletRepository: ChaletRepository,
+): Promise<void> {
+  if (user.role === Role.ADMIN) return;
+  const allowed = await chaletRepository.isOwnerOrMember(user.id, chaletId);
+  if (!allowed) {
+    throw new ForbiddenError(
+      'Você só pode alterar reservas do seu próprio chalé.',
+    );
   }
 }
 
@@ -162,6 +174,7 @@ export class UpdateReservationUseCase {
   constructor(
     private readonly reservationRepository: ReservationRepository,
     private readonly eventRepository: EventRepository,
+    private readonly chaletRepository: ChaletRepository,
   ) {}
 
   async execute(
@@ -172,7 +185,11 @@ export class UpdateReservationUseCase {
     if (!reservation) {
       throw new NotFoundError('Reserva não encontrada.');
     }
-    ensureCanManage(user);
+    await ensureCanManageChalet(
+      user,
+      reservation.chaletId,
+      this.chaletRepository,
+    );
 
     const event = await this.eventRepository.findById(reservation.eventId);
     if (!event) {
@@ -207,6 +224,7 @@ export class CancelReservationUseCase {
   constructor(
     private readonly reservationRepository: ReservationRepository,
     private readonly eventRepository: EventRepository,
+    private readonly chaletRepository: ChaletRepository,
   ) {}
 
   async execute(
@@ -217,7 +235,11 @@ export class CancelReservationUseCase {
     if (!reservation) {
       throw new NotFoundError('Reserva não encontrada.');
     }
-    ensureCanManage(user);
+    await ensureCanManageChalet(
+      user,
+      reservation.chaletId,
+      this.chaletRepository,
+    );
 
     const event = await this.eventRepository.findById(reservation.eventId);
     if (event) {

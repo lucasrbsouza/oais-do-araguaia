@@ -128,6 +128,7 @@ export function SelectField({ label, error, className, id, children, ...props }:
         id={inputId}
         className={cn(
           "h-11 rounded-sm border border-hairline bg-canvas px-3 text-base text-ink focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink",
+          "disabled:cursor-not-allowed disabled:bg-surface-soft disabled:text-muted",
           error && "border-error",
           className,
         )}

@@ -113,6 +113,20 @@ describe('UpdateChaletUseCase', () => {
     );
   });
 
+  it('virar proprietário desfaz o vínculo de familiar no mesmo chalé', async () => {
+    const repo = makeChaletRepo();
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    await useCase.execute({ id: 'c1', ownerId: 'u1' }, admin);
+    expect(repo.removeMember).toHaveBeenCalledWith('c1', 'u1');
+  });
+
+  it('editar sem trocar o dono não mexe nos familiares', async () => {
+    const repo = makeChaletRepo();
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    await useCase.execute({ id: 'c1', name: 'Só o nome' }, admin);
+    expect(repo.removeMember).not.toHaveBeenCalled();
+  });
+
   it('proprietário edita o próprio chalé (nome/status)', async () => {
     const repo = makeChaletRepo();
     const useCase = new UpdateChaletUseCase(repo, makeUserRepo());

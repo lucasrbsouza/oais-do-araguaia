@@ -5,7 +5,7 @@ import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatDate, nightsBetween } from "@/lib/format";
-import type { Reservation } from "@/lib/types";
+import type { Chalet, Reservation } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
@@ -24,7 +24,8 @@ interface ReservationsPanelProps {
 /**
  * Painel único de reservas usado tanto na página Reservas quanto na aba
  * do evento: mesmas colunas, mesmas ações e mesmas regras nas duas telas.
- * Editar, cancelar e excluir são exclusivos do administrador.
+ * Editar e cancelar valem para o admin (qualquer reserva) e para o dono e os
+ * membros do chalé (só as do chalé deles). Excluir é exclusivo do admin.
  */
 export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPanelProps) {
   const { user } = useSession();
@@ -44,13 +45,38 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
       api<Reservation[]>(eventId ? `/reservations?eventId=${eventId}` : "/reservations"),
   });
 
+  // Chalés do usuário: dono ou membro (familiar vinculado). O admin não precisa
+  // da lista — ele gerencia todas as reservas.
+  const { data: chalets } = useQuery({
+    queryKey: ["chalets"],
+    queryFn: () => api<Chalet[]>("/chalets"),
+    enabled: !isAdmin,
+  });
+
+  const myChaletIds = useMemo(() => {
+    if (!chalets || !user) return new Set<string>();
+    return new Set(
+      chalets
+        .filter(
+          (c) => c.owner?.id === user.id || c.members?.some((m) => m.id === user.id)
+        )
+        .map((c) => c.id)
+    );
+  }, [chalets, user]);
+
+  const canManage = (reservation: Reservation) =>
+    isAdmin || myChaletIds.has(reservation.chalet.id);
+
   const filteredReservations = useMemo(() => {
     if (!data) return [];
     if (!filterMyReservations) return data;
     return data.filter(
-      (r) => r.responsible.id === user?.id || r.chalet.ownerId === user?.id
+      (r) =>
+        r.responsible.id === user?.id ||
+        r.chalet.ownerId === user?.id ||
+        myChaletIds.has(r.chalet.id)
     );
-  }, [data, filterMyReservations, user?.id]);
+  }, [data, filterMyReservations, myChaletIds, user?.id]);
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) =>
@@ -147,7 +173,10 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
           </thead>
           <tbody>
             {filteredReservations.map((r) => {
-              const isMyReservation = r.responsible.id === user?.id || r.chalet.ownerId === user?.id;
+              const isMyReservation =
+                r.responsible.id === user?.id ||
+                r.chalet.ownerId === user?.id ||
+                myChaletIds.has(r.chalet.id);
               return (
                 <tr
                   key={r.id}
@@ -191,7 +220,7 @@ export function ReservationsPanel({ eventId, eventOpen = true }: ReservationsPan
                   </Td>
                   <Td>
                     <div className="flex flex-wrap gap-1 xl:flex-nowrap">
-                      {r.status === "ACTIVE" && eventOpen && isAdmin && (
+                      {r.status === "ACTIVE" && eventOpen && canManage(r) && (
                         <>
                           <Button
                             variant="ghost"

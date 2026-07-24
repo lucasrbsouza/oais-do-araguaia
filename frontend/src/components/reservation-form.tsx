@@ -74,8 +74,10 @@ export function ReservationForm({ defaultEventId, reservation, onDone }: Reserva
     enabled: !isEdit,
   });
 
-  // Proprietário: reserva sempre do próprio chalé, sem seleção.
-  const myChalet = chalets?.find((c) => c.owner?.id === user?.id);
+  // Proprietário (ou familiar vinculado): reserva sempre do chalé dele, sem seleção.
+  const myChalet = chalets?.find(
+    (c) => c.owner?.id === user?.id || c.members?.some((m) => m.id === user?.id)
+  );
 
   const form = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),

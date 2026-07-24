@@ -30,7 +30,14 @@ const schema = z.object({
   chaletId: z.string().optional(),
   /** Vínculo opcional: chalé ao qual o usuário pertencerá como FAMILIAR. */
   memberChaletId: z.string().optional(),
-});
+})
+  // Dono e familiar são vínculos excludentes: quem é proprietário já pertence
+  // ao chalé, e ocupar também uma vaga de familiar consome uma das 4 e faz o
+  // usuário sumir da lista "Selecionar existente" das outras telas.
+  .refine((d) => !(d.chaletId && d.memberChaletId), {
+    message: "Escolha só um vínculo: proprietário OU familiar.",
+    path: ["memberChaletId"],
+  });
 
 type FormData = z.infer<typeof schema>;
 
@@ -66,6 +73,10 @@ export default function UsersPage() {
     resolver: zodResolver(schema),
     defaultValues: { role: "OWNER", chaletId: "", memberChaletId: "" },
   });
+
+  // Os dois vínculos se excluem: escolher um desabilita o outro.
+  const watchedOwnerChaletId = form.watch("chaletId");
+  const watchedMemberChaletId = form.watch("memberChaletId");
 
   const createMutation = useMutation({
     mutationFn: async ({ chaletId, memberChaletId, ...data }: FormData) => {
@@ -249,7 +260,12 @@ export default function UsersPage() {
               {...form.register("phone")}
             />
             {chalets && chalets.length > 0 && (
-              <SelectField label="Vincular como Familiar de Chalé (opcional)" {...form.register("memberChaletId")}>
+              <SelectField
+                label="Vincular como Familiar de Chalé (opcional)"
+                error={form.formState.errors.memberChaletId?.message}
+                disabled={Boolean(watchedOwnerChaletId)}
+                {...form.register("memberChaletId")}
+              >
                 <option value="">Nenhum chalé (apenas usuário)</option>
                 {chalets.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -259,7 +275,11 @@ export default function UsersPage() {
               </SelectField>
             )}
             {availableOwnerChalets.length > 0 && (
-              <SelectField label="Definir como Proprietário do Chalé (opcional)" {...form.register("chaletId")}>
+              <SelectField
+                label="Definir como Proprietário do Chalé (opcional)"
+                disabled={Boolean(watchedMemberChaletId)}
+                {...form.register("chaletId")}
+              >
                 <option value="">Sem chalé sob sua propriedade</option>
                 {availableOwnerChalets.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -268,6 +288,10 @@ export default function UsersPage() {
                 ))}
               </SelectField>
             )}
+            <p className="text-xs text-muted">
+              Proprietário e familiar são vínculos excludentes — o dono já pertence ao chalé e não
+              ocupa vaga de familiar.
+            </p>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Cancelar

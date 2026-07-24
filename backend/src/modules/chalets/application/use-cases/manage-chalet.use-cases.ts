@@ -88,6 +88,12 @@ export class UpdateChaletUseCase {
         throw new NotFoundError('Proprietário não encontrado.');
       }
     }
+    // Dono não é familiar de si mesmo: virar proprietário desfaz o vínculo de
+    // membro no mesmo chalé, que senão ocuparia uma das 4 vagas de familiar.
+    // Antes do update para a resposta já sair sem ele na lista.
+    if (input.ownerId) {
+      await this.chaletRepository.removeMember(input.id, input.ownerId);
+    }
     const updated = await this.chaletRepository.update(input.id, {
       name: input.name,
       ownerId: input.ownerId,
@@ -208,7 +214,9 @@ export class AddChaletMemberUseCase {
         targetUser = existingUser;
       } else {
         if (!input.name || !input.password) {
-          throw new ConflictError('Nome e senha são obrigatórios para criar novo usuário.');
+          throw new ConflictError(
+            'Nome e senha são obrigatórios para criar novo usuário.',
+          );
         }
         const nameTaken = await this.userRepository.findByName(input.name);
         if (nameTaken) {
@@ -228,7 +236,9 @@ export class AddChaletMemberUseCase {
         targetUser = createdUser;
       }
     } else {
-      throw new ConflictError('Informe um usuário existente ou dados para cadastro.');
+      throw new ConflictError(
+        'Informe um usuário existente ou dados para cadastro.',
+      );
     }
 
     const isAlreadyLinked = await this.chaletRepository.isMemberOfAnyChalet(
@@ -241,7 +251,11 @@ export class AddChaletMemberUseCase {
     }
 
     await this.chaletRepository.addMember(input.chaletId, targetUser.id);
-    return { id: targetUser.id, name: targetUser.name, email: targetUser.email };
+    return {
+      id: targetUser.id,
+      name: targetUser.name,
+      email: targetUser.email,
+    };
   }
 }
 

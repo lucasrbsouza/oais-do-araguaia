@@ -1041,6 +1041,12 @@ function route(db: Db, req: DemoRequest): unknown {
       if (body.status) chalet.status = body.status as ChaletStatus;
       if (body.ownerId !== undefined && isAdmin) {
         chalet.ownerId = (body.ownerId as string) || null;
+        // Dono não é familiar de si mesmo: não pode ocupar vaga de familiar.
+        if (chalet.ownerId) {
+          db.chaletMembers = (db.chaletMembers ?? []).filter(
+            (m) => !(m.chaletId === chalet.id && m.userId === chalet.ownerId),
+          );
+        }
       }
       return chaletResponse(db, chalet);
     }
@@ -1392,9 +1398,9 @@ function route(db: Db, req: DemoRequest): unknown {
   // ── Reservas ──
   if (path === "/reservations" && method === "GET") {
     let list = db.reservations.slice();
-    // Proprietário vê apenas reservas do(s) próprio(s) chalé(s).
+    // Proprietário e membros veem apenas reservas do(s) chalé(s) deles.
     if (!isAdmin) {
-      const ownIds = new Set(db.chalets.filter((c) => c.ownerId === user.id).map((c) => c.id));
+      const ownIds = new Set(findAccessibleChalets(db, user.id).map((c) => c.id));
       list = list.filter((r) => ownIds.has(r.chaletId));
     }
     const eventId = query.get("eventId");
@@ -1418,7 +1424,7 @@ function route(db: Db, req: DemoRequest): unknown {
     const event = requireEventOpen(db, String(body.eventId));
     const chalet = db.chalets.find((c) => c.id === body.chaletId);
     if (!chalet) throw new DemoApiError(404, "Chalé não encontrado.");
-    if (!isAdmin && chalet.ownerId !== user.id) {
+    if (!isAdmin && !isChaletOwnerOrMember(db, chalet.id, user.id)) {
       throw new DemoApiError(403, "Você só pode reservar o seu próprio chalé.");
     }
     const checkIn = String(body.checkIn).slice(0, 10);
@@ -1444,11 +1450,11 @@ function route(db: Db, req: DemoRequest): unknown {
     return reservationResponse(db, reservation);
   }
   if (seg[0] === "reservations" && seg.length === 2 && method === "PATCH") {
-    if (!isAdmin) {
-      throw new DemoApiError(403, "Somente administradores podem alterar reservas.");
-    }
     const reservation = db.reservations.find((r) => r.id === seg[1]);
     if (!reservation) throw new DemoApiError(404, "Reserva não encontrada.");
+    if (!isAdmin && !isChaletOwnerOrMember(db, reservation.chaletId, user.id)) {
+      throw new DemoApiError(403, "Você só pode alterar reservas do seu próprio chalé.");
+    }
     const event = requireEventOpen(db, reservation.eventId);
     const checkIn = body.checkIn ? String(body.checkIn).slice(0, 10) : reservation.checkIn;
     const checkOut = body.checkOut ? String(body.checkOut).slice(0, 10) : reservation.checkOut;
@@ -1473,11 +1479,11 @@ function route(db: Db, req: DemoRequest): unknown {
     return reservationResponse(db, reservation);
   }
   if (seg[0] === "reservations" && seg[2] === "cancel" && method === "POST") {
-    if (!isAdmin) {
-      throw new DemoApiError(403, "Somente administradores podem alterar reservas.");
-    }
     const reservation = db.reservations.find((r) => r.id === seg[1]);
     if (!reservation) throw new DemoApiError(404, "Reserva não encontrada.");
+    if (!isAdmin && !isChaletOwnerOrMember(db, reservation.chaletId, user.id)) {
+      throw new DemoApiError(403, "Você só pode alterar reservas do seu próprio chalé.");
+    }
     requireEventOpen(db, reservation.eventId);
     reservation.status = "CANCELLED";
     return reservationResponse(db, reservation);

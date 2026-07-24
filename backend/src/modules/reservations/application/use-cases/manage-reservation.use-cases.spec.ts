@@ -30,6 +30,13 @@ const owner: AuthenticatedUser = {
   name: 'Owner',
   role: 'OWNER',
 };
+/** Familiar vinculado ao chalé (ChaletMember), sem ser o dono. */
+const member: AuthenticatedUser = {
+  id: 'membro',
+  email: 'm@m.com',
+  name: 'Membro',
+  role: 'OWNER',
+};
 
 const openEvent = {
   id: 'e1',
@@ -87,14 +94,19 @@ const makeEventRepo = (event: Event | null = openEvent): EventRepository =>
     findById: jest.fn().mockResolvedValue(event),
   }) as unknown as EventRepository;
 
-const makeChaletRepo = (ownerId: string | null = 'owner'): ChaletRepository =>
+const makeChaletRepo = (
+  ownerId: string | null = 'owner',
+  memberIds: string[] = [],
+): ChaletRepository =>
   ({
     findById: jest
       .fn()
       .mockResolvedValue({ id: 'c1', number: 1, ownerId, owner: null }),
     isOwnerOrMember: jest
       .fn()
-      .mockImplementation((userId) => Promise.resolve(ownerId === userId)),
+      .mockImplementation((userId: string) =>
+        Promise.resolve(ownerId === userId || memberIds.includes(userId)),
+      ),
     findAccessibleByUser: jest
       .fn()
       .mockResolvedValue([{ id: 'c1', number: 1, ownerId, owner: null }]),
@@ -245,7 +257,11 @@ describe('CreateReservationUseCase', () => {
 describe('UpdateReservationUseCase', () => {
   it('admin atualiza reserva', async () => {
     const repo = makeReservationRepo();
-    const useCase = new UpdateReservationUseCase(repo, makeEventRepo());
+    const useCase = new UpdateReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo('outro-dono'),
+    );
     await useCase.execute({ id: 'r1', adults: 3 }, admin);
     expect(repo.update).toHaveBeenCalledWith(
       'r1',
@@ -253,10 +269,36 @@ describe('UpdateReservationUseCase', () => {
     );
   });
 
-  it('proprietário não altera reserva, mesmo sendo o responsável', async () => {
+  it('proprietário altera reserva do próprio chalé', async () => {
+    const repo = makeReservationRepo();
+    const useCase = new UpdateReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo(),
+    );
+    await useCase.execute({ id: 'r1', adults: 3 }, owner);
+    expect(repo.update).toHaveBeenCalledWith(
+      'r1',
+      expect.objectContaining({ adults: 3 }),
+    );
+  });
+
+  it('membro do chalé altera a reserva do chalé', async () => {
+    const repo = makeReservationRepo();
+    const useCase = new UpdateReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo('outro-dono', ['membro']),
+    );
+    await useCase.execute({ id: 'r1', adults: 3 }, member);
+    expect(repo.update).toHaveBeenCalled();
+  });
+
+  it('proprietário não altera reserva de chalé alheio', async () => {
     const useCase = new UpdateReservationUseCase(
       makeReservationRepo(),
       makeEventRepo(),
+      makeChaletRepo('outro-dono'),
     );
     await expect(
       useCase.execute({ id: 'r1', adults: 3 }, owner),
@@ -273,7 +315,11 @@ describe('UpdateReservationUseCase', () => {
           activeStay('r3', '2030-01-04', '2030-01-06'),
         ]),
     });
-    const useCase = new UpdateReservationUseCase(repo, makeEventRepo());
+    const useCase = new UpdateReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo(),
+    );
     await useCase.execute({ id: 'r1', adults: 3 }, admin);
     expect(repo.update).toHaveBeenCalled();
   });
@@ -289,7 +335,11 @@ describe('UpdateReservationUseCase', () => {
           activeStay('r4', '2030-01-05', '2030-01-06'),
         ]),
     });
-    const useCase = new UpdateReservationUseCase(repo, makeEventRepo());
+    const useCase = new UpdateReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo(),
+    );
     // r1 sai de 04–05 (livre) e tenta ir para 05–06, onde já há 3 entradas.
     await expect(
       useCase.execute({ id: 'r1', checkIn: new Date('2030-01-05') }, admin),
@@ -300,7 +350,11 @@ describe('UpdateReservationUseCase', () => {
 describe('CancelReservationUseCase', () => {
   it('cancela reserva ativa', async () => {
     const repo = makeReservationRepo();
-    const useCase = new CancelReservationUseCase(repo, makeEventRepo());
+    const useCase = new CancelReservationUseCase(
+      repo,
+      makeEventRepo(),
+      makeChaletRepo('outro-dono'),
+    );
     const result = await useCase.execute('r1', admin);
     expect(result.status).toBe('CANCELLED');
   });
@@ -309,14 +363,26 @@ describe('CancelReservationUseCase', () => {
     const useCase = new CancelReservationUseCase(
       makeReservationRepo(),
       makeEventRepo({ ...openEvent, status: 'CLOSED' }),
+      makeChaletRepo(),
     );
     await expect(useCase.execute('r1', admin)).rejects.toThrow(ConflictError);
   });
 
-  it('proprietário não cancela a própria reserva', async () => {
+  it('proprietário cancela a reserva do próprio chalé', async () => {
     const useCase = new CancelReservationUseCase(
       makeReservationRepo(),
       makeEventRepo(),
+      makeChaletRepo(),
+    );
+    const result = await useCase.execute('r1', owner);
+    expect(result.status).toBe('CANCELLED');
+  });
+
+  it('proprietário não cancela reserva de chalé alheio', async () => {
+    const useCase = new CancelReservationUseCase(
+      makeReservationRepo(),
+      makeEventRepo(),
+      makeChaletRepo('outro-dono'),
     );
     await expect(useCase.execute('r1', owner)).rejects.toThrow(ForbiddenError);
   });

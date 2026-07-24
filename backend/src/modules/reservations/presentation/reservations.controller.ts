@@ -179,8 +179,9 @@ export class ReservationsController {
     return this.createReservation.execute(dto, user);
   }
 
+  // Admin altera qualquer reserva; proprietário e membros, só as do seu chalé
+  // — a checagem fica no caso de uso, que conhece o chalé da reserva.
   @Patch(':id')
-  @Roles('ADMIN')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReservationDto,
@@ -190,7 +191,6 @@ export class ReservationsController {
   }
 
   @Post(':id/cancel')
-  @Roles('ADMIN')
   @HttpCode(HttpStatus.OK)
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
