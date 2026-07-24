@@ -20,6 +20,11 @@ import {
   EventReport,
   ReportsQueryService,
 } from '../application/reports-query.service';
+import { ReservationsExportService } from '../application/reservations-export.service';
+import {
+  ReservationsReport,
+  ReservationsReportService,
+} from '../application/reservations-report.service';
 
 @ApiTags('reports')
 @ApiBearerAuth()
@@ -28,6 +33,8 @@ export class ReportsController {
   constructor(
     private readonly reports: ReportsQueryService,
     private readonly exports: ReportExportService,
+    private readonly reservations: ReservationsReportService,
+    private readonly reservationsExports: ReservationsExportService,
     private readonly audit: AuditService,
   ) {}
 
@@ -72,6 +79,51 @@ export class ReportsController {
       entity: 'Report',
       entityId: eventId,
       metadata: { format: 'pdf' },
+    });
+    return this.toStreamableFile(file, res);
+  }
+
+  @Get('events/:eventId/reservations')
+  reservationsReport(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ): Promise<ReservationsReport> {
+    return this.reservations.byEvent(eventId);
+  }
+
+  @Get('events/:eventId/reservations/export/xlsx')
+  @ApiProduces(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  async exportReservationsXlsx(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<StreamableFile> {
+    const file = await this.reservationsExports.xlsx(eventId);
+    await this.audit.log({
+      userId: user.id,
+      action: 'REPORT_EXPORTED',
+      entity: 'Report',
+      entityId: eventId,
+      metadata: { format: 'xlsx', report: 'reservations' },
+    });
+    return this.toStreamableFile(file, res);
+  }
+
+  @Get('events/:eventId/reservations/export/pdf')
+  @ApiProduces('application/pdf')
+  async exportReservationsPdf(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<StreamableFile> {
+    const file = await this.reservationsExports.pdf(eventId);
+    await this.audit.log({
+      userId: user.id,
+      action: 'REPORT_EXPORTED',
+      entity: 'Report',
+      entityId: eventId,
+      metadata: { format: 'pdf', report: 'reservations' },
     });
     return this.toStreamableFile(file, res);
   }

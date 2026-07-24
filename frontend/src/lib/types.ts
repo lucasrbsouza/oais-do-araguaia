@@ -202,6 +202,43 @@ export interface EventReport {
   }> | null;
 }
 
+export interface ReservationDetail {
+  id: string;
+  responsibleName: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  adults: number;
+  children: number;
+  alcoholConsumers: number;
+  totalPeople: number;
+}
+
+export interface ChaletGuestsRow {
+  chaletId: string;
+  chaletNumber: number;
+  chaletName: string;
+  ownerName: string | null;
+  adults: number;
+  children: number;
+  alcoholConsumers: number;
+  totalPeople: number;
+  reservations: ReservationDetail[];
+}
+
+export interface ReservationsReport {
+  event: { id: string; name: string; startDate: string; endDate: string; status: EventStatus };
+  chalets: ChaletGuestsRow[];
+  totals: {
+    adults: number;
+    children: number;
+    alcoholConsumers: number;
+    totalPeople: number;
+    reservations: number;
+    chaletsOccupied: number;
+  };
+}
+
 export interface DashboardSummary {
   chalets: { total: number; occupied: number; reserved: number; free: number };
   upcomingReservations: Array<{

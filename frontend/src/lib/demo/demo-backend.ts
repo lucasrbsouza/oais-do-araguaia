@@ -13,6 +13,7 @@ import type {
   EventStatus,
   PurchaseCategory,
   ReceivableStatus,
+  ReservationsReport,
   Role,
   SessionUser,
   SettlementAutoMode,
@@ -1733,6 +1734,72 @@ function route(db: Db, req: DemoRequest): unknown {
       };
     });
     return { data, total: list.length, page, perPage };
+  }
+
+  // ── Relatório geral de reservas ──
+  // Antes do relatório do evento: aquele casa com qualquer /reports/events/*.
+  if (
+    seg[0] === "reports" &&
+    seg[1] === "events" &&
+    seg[3] === "reservations" &&
+    seg.length === 4 &&
+    method === "GET"
+  ) {
+    const event = db.events.find((e) => e.id === seg[2]);
+    if (!event) throw new DemoApiError(404, "Evento não encontrado.");
+
+    const reservas = db.reservations
+      .filter((r) => r.eventId === event.id && r.status === "ACTIVE")
+      .sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+
+    const chalets = db.chalets
+      .slice()
+      .sort((a, b) => a.number - b.number)
+      .map((c) => {
+        const doChale = reservas
+          .filter((r) => r.chaletId === c.id)
+          .map((r) => ({
+            id: r.id,
+            responsibleName: db.users.find((u) => u.id === r.responsibleId)?.name ?? "?",
+            checkIn: r.checkIn,
+            checkOut: r.checkOut,
+            nights: nightsOf(r),
+            adults: r.adults,
+            children: r.children,
+            alcoholConsumers: r.alcoholConsumers,
+            totalPeople: r.adults + r.children,
+          }));
+        const somar = (valor: (r: (typeof doChale)[number]) => number) =>
+          doChale.reduce((s, r) => s + valor(r), 0);
+        return {
+          chaletId: c.id,
+          chaletNumber: c.number,
+          chaletName: c.name,
+          ownerName: db.users.find((u) => u.id === c.ownerId)?.name ?? null,
+          adults: somar((r) => r.adults),
+          children: somar((r) => r.children),
+          alcoholConsumers: somar((r) => r.alcoholConsumers),
+          totalPeople: somar((r) => r.totalPeople),
+          reservations: doChale,
+        };
+      });
+
+    const somarChales = (valor: (c: (typeof chalets)[number]) => number) =>
+      chalets.reduce((s, c) => s + valor(c), 0);
+
+    const relatorio: ReservationsReport = {
+      event: { ...event },
+      chalets,
+      totals: {
+        adults: somarChales((c) => c.adults),
+        children: somarChales((c) => c.children),
+        alcoholConsumers: somarChales((c) => c.alcoholConsumers),
+        totalPeople: somarChales((c) => c.totalPeople),
+        reservations: reservas.length,
+        chaletsOccupied: chalets.filter((c) => c.reservations.length > 0).length,
+      },
+    };
+    return relatorio;
   }
 
   // ── Relatório ──

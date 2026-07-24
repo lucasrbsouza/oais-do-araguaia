@@ -83,6 +83,15 @@ body {
     white-space: normal;
   }
 
+  /*
+   * Célula que só existe para alinhar a tabela do desktop. O `hidden` do
+   * Tailwind perde para a regra acima na especificidade e a célula vazia
+   * abriria uma faixa em branco dentro do cartão.
+   */
+  table[data-stacked] td.somente-tabela {
+    display: none;
+  }
+
   table[data-stacked] td[data-label] {
     grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
     gap: 0.25rem 1rem;

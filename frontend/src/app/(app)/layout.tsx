@@ -2,6 +2,7 @@
 
 import {
   CalendarDays,
+  ChartColumn,
   Home,
   LayoutDashboard,
   LogOut,
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/compras-evento", label: "Compras", icon: ShoppingCart },
   { href: "/reservas", label: "Reservas", icon: BedDouble },
   { href: "/chales", label: "Chalés", icon: Home },
+  { href: "/relatorios", label: "Relatórios", icon: ChartColumn },
   { href: "/usuarios", label: "Usuários", icon: Users },
   { href: "/auditoria", label: "Auditoria", icon: ScrollText, adminOnly: true },
 ];
