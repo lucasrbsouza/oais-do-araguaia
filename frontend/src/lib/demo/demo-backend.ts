@@ -434,6 +434,29 @@ function staysOverlap(a: StayPeriod, b: StayPeriod): boolean {
   );
 }
 
+/** A estadia está acontecendo no dia informado (YYYY-MM-DD)? */
+function stayCoversDay(stay: StayPeriod, day: string): boolean {
+  const at = Date.parse(day);
+  return Date.parse(stay.checkIn) <= at && at < occupiedUntil(stay);
+}
+
+/**
+ * Ocupação sai das reservas, não do campo `status` do chalé (espelha
+ * `chalet-occupancy.ts` do backend). Estadia em andamento manda sobre reserva
+ * futura; estadia que já terminou não conta.
+ */
+function chaletStatusOf(db: Db, chaletId: string): ChaletStatus {
+  const today = new Date().toISOString().slice(0, 10);
+  let status: ChaletStatus = "FREE";
+  for (const r of db.reservations) {
+    if (r.chaletId !== chaletId || r.status !== "ACTIVE") continue;
+    if (db.events.find((e) => e.id === r.eventId)?.status === "CANCELLED") continue;
+    if (stayCoversDay(r, today)) return "OCCUPIED";
+    if (r.checkIn > today) status = "RESERVED";
+  }
+  return status;
+}
+
 /** O chalé tem 3 suítes: aceita até 3 entradas ao mesmo tempo. */
 function ensureSuitesAvailable(
   db: Db,
@@ -558,7 +581,7 @@ const chaletResponse = (db: Db, c: DbChalet) => {
     id: c.id,
     number: c.number,
     name: c.name,
-    status: c.status,
+    status: chaletStatusOf(db, c.id),
     owner: c.ownerId
       ? { id: c.ownerId, name: db.users.find((u) => u.id === c.ownerId)?.name ?? "?" }
       : null,
@@ -1038,7 +1061,6 @@ function route(db: Db, req: DemoRequest): unknown {
         throw new DemoApiError(403, "Você só pode editar o seu próprio chalé.");
       }
       if (body.name) chalet.name = String(body.name);
-      if (body.status) chalet.status = body.status as ChaletStatus;
       if (body.ownerId !== undefined && isAdmin) {
         const novoDono = (body.ownerId as string) || null;
         // Vínculo é um só: familiar de outro chalé não vira dono deste.
@@ -1798,21 +1820,26 @@ function route(db: Db, req: DemoRequest): unknown {
         paidChalets: statuses.filter((s) => s === "PAID").length,
       };
     }
+    const currentStays = db.reservations
+      .filter(
+        (r) =>
+          r.status === "ACTIVE" &&
+          r.checkOut >= today &&
+          db.events.find((e) => e.id === r.eventId)?.status !== "CANCELLED",
+      )
+      .sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+
+    // Mesma regra da tela de Chalés: ocupação sai das reservas.
+    const statuses = db.chalets.map((c) => chaletStatusOf(db, c.id));
+
     const summary: DashboardSummary = {
       chalets: {
         total: db.chalets.length,
-        occupied: db.chalets.filter((c) => c.status === "OCCUPIED").length,
-        reserved: db.chalets.filter((c) => c.status === "RESERVED").length,
-        free: db.chalets.filter((c) => c.status === "FREE").length,
+        occupied: statuses.filter((s) => s === "OCCUPIED").length,
+        reserved: statuses.filter((s) => s === "RESERVED").length,
+        free: statuses.filter((s) => s === "FREE").length,
       },
-      upcomingReservations: db.reservations
-        .filter(
-          (r) =>
-            r.status === "ACTIVE" &&
-            r.checkOut >= today &&
-            db.events.find((e) => e.id === r.eventId)?.status !== "CANCELLED",
-        )
-        .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
+      upcomingReservations: currentStays
         .slice(0, 10)
         .map((r) => {
           const chalet = db.chalets.find((c) => c.id === r.chaletId);

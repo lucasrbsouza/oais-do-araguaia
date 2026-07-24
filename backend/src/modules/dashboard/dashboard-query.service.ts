@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/infrastructure/database/prisma.service';
+import { todayAsUtcDate } from '../../shared/domain/stay';
+import { deriveChaletStatuses } from '../chalets/domain/chalet-occupancy';
 import {
   derivePaymentStatus,
   PaymentStatus,
@@ -33,10 +35,10 @@ export class DashboardQueryService {
   constructor(private readonly prisma: PrismaService) {}
 
   async summary(): Promise<DashboardSummary> {
-    const today = new Date();
+    const today = todayAsUtcDate();
 
-    const [chaletGroups, upcoming, lastEvent] = await Promise.all([
-      this.prisma.chalet.groupBy({ by: ['status'], _count: true }),
+    const [totalChalets, currentStays, lastEvent] = await Promise.all([
+      this.prisma.chalet.count(),
       this.prisma.reservation.findMany({
         where: {
           status: 'ACTIVE',
@@ -45,7 +47,6 @@ export class DashboardQueryService {
         },
         include: { chalet: true, responsible: true },
         orderBy: { checkIn: 'asc' },
-        take: 10,
       }),
       this.prisma.event.findFirst({
         where: { status: { not: 'CANCELLED' } },
@@ -58,12 +59,16 @@ export class DashboardQueryService {
       }),
     ]);
 
-    const countByStatus = new Map(
-      chaletGroups.map((g) => [g.status, g._count]),
-    );
-    const occupied = countByStatus.get('OCCUPIED') ?? 0;
-    const reserved = countByStatus.get('RESERVED') ?? 0;
-    const free = countByStatus.get('FREE') ?? 0;
+    // Mesma regra da tela de Chalés: ocupação sai das reservas, não de campo
+    // editado à mão.
+    const statuses = deriveChaletStatuses(currentStays, today);
+    let occupied = 0;
+    let reserved = 0;
+    for (const status of statuses.values()) {
+      if (status === 'OCCUPIED') occupied += 1;
+      else reserved += 1;
+    }
+    const free = Math.max(0, totalChalets - occupied - reserved);
 
     let lastEventSummary: DashboardSummary['lastEvent'] = null;
     if (lastEvent) {
@@ -100,8 +105,8 @@ export class DashboardQueryService {
     }
 
     return {
-      chalets: { total: occupied + reserved + free, occupied, reserved, free },
-      upcomingReservations: upcoming.map((r) => ({
+      chalets: { total: totalChalets, occupied, reserved, free },
+      upcomingReservations: currentStays.slice(0, 10).map((r) => ({
         id: r.id,
         chaletNumber: r.chalet.number,
         chaletName: r.chalet.name,

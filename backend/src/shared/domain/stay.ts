@@ -34,3 +34,25 @@ export function staysOverlap(a: StayPeriod, b: StayPeriod): boolean {
     b.checkIn.getTime() < occupiedUntil(a)
   );
 }
+
+/** A estadia está acontecendo no dia informado? */
+export function stayCoversDay(stay: StayPeriod, day: Date): boolean {
+  return (
+    stay.checkIn.getTime() <= day.getTime() &&
+    day.getTime() < occupiedUntil(stay)
+  );
+}
+
+/** Fuso do condomínio — o dia vira aqui, não no relógio UTC do servidor. */
+const CONDO_TIMEZONE = 'America/Sao_Paulo';
+
+/**
+ * Hoje no fuso do condomínio, à meia-noite UTC — mesmo formato das colunas
+ * `@db.Date` de check-in/check-out, para comparar dia com dia.
+ */
+export function todayAsUtcDate(now: Date = new Date()): Date {
+  const day = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CONDO_TIMEZONE,
+  }).format(now);
+  return new Date(`${day}T00:00:00.000Z`);
+}

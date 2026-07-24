@@ -75,11 +75,6 @@ class UpdateChaletDto {
   @IsOptional()
   @IsUUID()
   ownerId?: string;
-
-  @ApiPropertyOptional({ enum: ChaletStatus })
-  @IsOptional()
-  @IsEnum(ChaletStatus)
-  status?: ChaletStatus;
 }
 
 class AddChaletMemberDto {

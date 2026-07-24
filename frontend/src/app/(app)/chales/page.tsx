@@ -5,7 +5,7 @@ import { useState, useMemo } from "react";
 import { Users, UserPlus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { Chalet, ChaletStatus, UserItem } from "@/lib/types";
+import type { Chalet, UserItem } from "@/lib/types";
 import { CHALET_STATUS_LABELS } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { ChaletStatusBadge } from "@/components/ui/badge";
@@ -20,7 +20,6 @@ interface EditState {
   chalet: Chalet;
   name: string;
   ownerId: string;
-  status: ChaletStatus;
 }
 
 interface CreateState {
@@ -138,7 +137,6 @@ export default function ChaletsPage() {
         method: "PATCH",
         body: {
           name: state.name,
-          status: state.status,
           ...(isAdmin && state.ownerId ? { ownerId: state.ownerId } : {}),
         },
       }),
@@ -327,7 +325,6 @@ export default function ChaletsPage() {
                               chalet,
                               name: chalet.name,
                               ownerId: chalet.owner?.id ?? "",
-                              status: chalet.status,
                             });
                           }}
                         >
@@ -629,7 +626,8 @@ export default function ChaletsPage() {
         )}
       </Dialog>
 
-      {/* Editar (admin: tudo; proprietário: nome e status do próprio chalé) */}
+      {/* Editar (admin: tudo; proprietário: nome do próprio chalé).
+          Status não entra: sai das reservas, ninguém edita à mão. */}
       <Dialog
         open={edit !== null}
         onClose={() => setEdit(null)}
@@ -666,17 +664,15 @@ export default function ChaletsPage() {
                 ))}
               </SelectField>
             )}
-            <SelectField
-              label="Status"
-              value={edit.status}
-              onChange={(e) => setEdit({ ...edit, status: e.target.value as ChaletStatus })}
-            >
-              {Object.entries(CHALET_STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </SelectField>
+            <div className="rounded-lg bg-surface-soft px-3 py-2.5">
+              <p className="text-xs text-muted">
+                Status atual:{" "}
+                <span className="font-medium text-ink">
+                  {CHALET_STATUS_LABELS[edit.chalet.status]}
+                </span>{" "}
+                — calculado pelas reservas do chalé.
+              </p>
+            </div>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button type="button" variant="secondary" onClick={() => setEdit(null)}>
                 Cancelar

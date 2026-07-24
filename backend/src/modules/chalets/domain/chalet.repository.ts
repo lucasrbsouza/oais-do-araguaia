@@ -1,4 +1,4 @@
-import { Chalet, ChaletStatus, User } from '@prisma/client';
+import { Chalet, User } from '@prisma/client';
 
 export type ChaletMemberDetail = {
   id: string;
@@ -22,7 +22,6 @@ export interface CreateChaletData {
 export interface UpdateChaletData {
   name?: string;
   ownerId?: string | null;
-  status?: ChaletStatus;
 }
 
 export abstract class ChaletRepository {

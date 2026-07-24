@@ -8,10 +8,12 @@ import {
 } from '../../../../shared/domain/domain-error';
 import { AuthenticatedUser } from '../../../../shared/infrastructure/auth/decorators';
 import { UserRepository } from '../../../users/domain/user.repository';
+import { chaletStatusOf } from '../../domain/chalet-occupancy';
 import {
   ChaletMemberDetail,
   ChaletRepository,
 } from '../../domain/chalet.repository';
+import { ChaletOccupancyQuery } from '../../infrastructure/chalet-occupancy.query';
 import { ChaletResponse, toChaletResponse } from '../chalet.mapper';
 
 export interface CreateChaletInput {
@@ -24,7 +26,6 @@ export interface UpdateChaletInput {
   id: string;
   name?: string;
   ownerId?: string | null;
-  status?: ChaletStatus;
 }
 
 @Injectable()
@@ -48,7 +49,8 @@ export class CreateChaletUseCase {
       }
     }
     const chalet = await this.chaletRepository.create(input);
-    return toChaletResponse(chalet);
+    // Chalé recém-criado não tem reserva nenhuma.
+    return toChaletResponse(chalet, ChaletStatus.FREE);
   }
 }
 
@@ -57,6 +59,7 @@ export class UpdateChaletUseCase {
   constructor(
     private readonly chaletRepository: ChaletRepository,
     private readonly userRepository: UserRepository,
+    private readonly occupancy: ChaletOccupancyQuery,
   ) {}
 
   async execute(
@@ -111,9 +114,9 @@ export class UpdateChaletUseCase {
     const updated = await this.chaletRepository.update(input.id, {
       name: input.name,
       ownerId: input.ownerId,
-      status: input.status,
     });
-    return toChaletResponse(updated);
+    const statuses = await this.occupancy.currentStatuses();
+    return toChaletResponse(updated, chaletStatusOf(statuses, updated.id));
   }
 }
 
@@ -138,11 +141,19 @@ export class DeleteChaletUseCase {
 
 @Injectable()
 export class ListChaletsUseCase {
-  constructor(private readonly chaletRepository: ChaletRepository) {}
+  constructor(
+    private readonly chaletRepository: ChaletRepository,
+    private readonly occupancy: ChaletOccupancyQuery,
+  ) {}
 
   async execute(): Promise<ChaletResponse[]> {
-    const chalets = await this.chaletRepository.list();
-    return chalets.map(toChaletResponse);
+    const [chalets, statuses] = await Promise.all([
+      this.chaletRepository.list(),
+      this.occupancy.currentStatuses(),
+    ]);
+    return chalets.map((chalet) =>
+      toChaletResponse(chalet, chaletStatusOf(statuses, chalet.id)),
+    );
   }
 }
 

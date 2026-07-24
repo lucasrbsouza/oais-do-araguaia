@@ -1,3 +1,4 @@
+import { ChaletStatus } from '@prisma/client';
 import {
   ConflictError,
   ForbiddenError,
@@ -9,6 +10,7 @@ import {
   ChaletRepository,
   ChaletWithOwner,
 } from '../../domain/chalet.repository';
+import { ChaletOccupancyQuery } from '../../infrastructure/chalet-occupancy.query';
 import {
   AddChaletMemberUseCase,
   CreateChaletUseCase,
@@ -54,6 +56,7 @@ const makeChaletRepo = (
   findByOwner: jest.fn().mockResolvedValue([]),
   findAccessibleByUser: jest.fn().mockResolvedValue([chalet]),
   isOwnerOrMember: jest.fn().mockResolvedValue(false),
+  isMemberOfAnyChalet: jest.fn().mockResolvedValue(false),
   listMembers: jest.fn().mockResolvedValue([]),
   addMember: jest.fn().mockResolvedValue(undefined),
   removeMember: jest.fn().mockResolvedValue(undefined),
@@ -62,6 +65,14 @@ const makeChaletRepo = (
   delete: jest.fn().mockResolvedValue(undefined),
   ...overrides,
 });
+
+/** Ocupação é derivada das reservas; aqui basta o mapa pronto. */
+const makeOccupancy = (
+  statuses: Map<string, ChaletStatus> = new Map(),
+): ChaletOccupancyQuery =>
+  ({
+    currentStatuses: jest.fn().mockResolvedValue(statuses),
+  }) as unknown as ChaletOccupancyQuery;
 
 const makeUserRepo = (found = true): UserRepository =>
   ({
@@ -102,20 +113,47 @@ describe('CreateChaletUseCase', () => {
 describe('UpdateChaletUseCase', () => {
   it('admin atualiza qualquer chalé, inclusive proprietário', async () => {
     const repo = makeChaletRepo();
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
-    await useCase.execute(
-      { id: 'c1', status: 'OCCUPIED', ownerId: 'u1' },
-      admin,
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
     );
+    await useCase.execute({ id: 'c1', name: 'Novo nome', ownerId: 'u1' }, admin);
     expect(repo.update).toHaveBeenCalledWith(
       'c1',
-      expect.objectContaining({ status: 'OCCUPIED', ownerId: 'u1' }),
+      expect.objectContaining({ name: 'Novo nome', ownerId: 'u1' }),
     );
+  });
+
+  it('status não é gravado: ninguém edita ocupação à mão', async () => {
+    const repo = makeChaletRepo();
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
+    );
+    await useCase.execute({ id: 'c1', name: 'Meu Chalé' }, admin);
+    expect(repo.update).toHaveBeenCalledWith(
+      'c1',
+      expect.not.objectContaining({ status: expect.anything() }),
+    );
+  });
+
+  it('resposta traz o status derivado das reservas, não o do banco', async () => {
+    const repo = makeChaletRepo();
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      // chalet mockado está como FREE no banco; a reserva de hoje manda
+      makeOccupancy(new Map([['c1', ChaletStatus.OCCUPIED]])),
+    );
+    const response = await useCase.execute({ id: 'c1', name: 'X' }, admin);
+    expect(response.status).toBe('OCCUPIED');
   });
 
   it('virar proprietário desfaz o vínculo de familiar no mesmo chalé', async () => {
     const repo = makeChaletRepo();
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
     await useCase.execute({ id: 'c1', ownerId: 'u1' }, admin);
     expect(repo.removeMember).toHaveBeenCalledWith('c1', 'u1');
   });
@@ -126,7 +164,7 @@ describe('UpdateChaletUseCase', () => {
         .fn()
         .mockResolvedValue([{ ...chalet, id: 'c2', number: 2, ownerId: 'x' }]),
     });
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
     await expect(
       useCase.execute({ id: 'c1', ownerId: 'u1' }, admin),
     ).rejects.toThrow(ConflictError);
@@ -136,14 +174,14 @@ describe('UpdateChaletUseCase', () => {
 
   it('editar sem trocar o dono não mexe nos familiares', async () => {
     const repo = makeChaletRepo();
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
     await useCase.execute({ id: 'c1', name: 'Só o nome' }, admin);
     expect(repo.removeMember).not.toHaveBeenCalled();
   });
 
-  it('proprietário edita o próprio chalé (nome/status)', async () => {
+  it('proprietário edita o nome do próprio chalé', async () => {
     const repo = makeChaletRepo();
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
     await useCase.execute({ id: 'c1', name: 'Meu Chalé' }, owner);
     expect(repo.update).toHaveBeenCalledWith(
       'c1',
@@ -155,14 +193,14 @@ describe('UpdateChaletUseCase', () => {
     const repo = makeChaletRepo({
       findById: jest.fn().mockResolvedValue({ ...chalet, ownerId: 'outro' }),
     });
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
     await expect(
       useCase.execute({ id: 'c1', name: 'X' }, owner),
     ).rejects.toThrow(ForbiddenError);
   });
 
   it('proprietário não transfere a propriedade', async () => {
-    const useCase = new UpdateChaletUseCase(makeChaletRepo(), makeUserRepo());
+    const useCase = new UpdateChaletUseCase(makeChaletRepo(), makeUserRepo(), makeOccupancy());
     await expect(
       useCase.execute({ id: 'c1', ownerId: 'outro' }, owner),
     ).rejects.toThrow(ForbiddenError);
@@ -172,7 +210,7 @@ describe('UpdateChaletUseCase', () => {
     const repo = makeChaletRepo({
       findById: jest.fn().mockResolvedValue(null),
     });
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
     await expect(
       useCase.execute({ id: 'x', name: 'Y' }, admin),
     ).rejects.toThrow(NotFoundError);
@@ -206,8 +244,23 @@ describe('DeleteChaletUseCase', () => {
 });
 
 describe('ListChaletsUseCase', () => {
+  it('marca como livre o chalé sem reserva em aberto', async () => {
+    const useCase = new ListChaletsUseCase(makeChaletRepo(), makeOccupancy());
+    const result = await useCase.execute();
+    expect(result[0].status).toBe('FREE');
+  });
+
+  it('marca como ocupado o chalé com estadia em andamento', async () => {
+    const useCase = new ListChaletsUseCase(
+      makeChaletRepo(),
+      makeOccupancy(new Map([['c1', ChaletStatus.OCCUPIED]])),
+    );
+    const result = await useCase.execute();
+    expect(result[0].status).toBe('OCCUPIED');
+  });
+
   it('lista chalés mapeados', async () => {
-    const useCase = new ListChaletsUseCase(makeChaletRepo());
+    const useCase = new ListChaletsUseCase(makeChaletRepo(), makeOccupancy());
     const result = await useCase.execute();
     expect(result[0]).toMatchObject({ number: 1, owner: null });
   });
