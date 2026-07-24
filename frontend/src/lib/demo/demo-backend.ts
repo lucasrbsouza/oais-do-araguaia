@@ -1040,7 +1040,21 @@ function route(db: Db, req: DemoRequest): unknown {
       if (body.name) chalet.name = String(body.name);
       if (body.status) chalet.status = body.status as ChaletStatus;
       if (body.ownerId !== undefined && isAdmin) {
-        chalet.ownerId = (body.ownerId as string) || null;
+        const novoDono = (body.ownerId as string) || null;
+        // Vínculo é um só: familiar de outro chalé não vira dono deste.
+        if (novoDono) {
+          const outro = (db.chaletMembers ?? []).find(
+            (m) => m.userId === novoDono && m.chaletId !== chalet.id,
+          );
+          if (outro) {
+            const c = db.chalets.find((x) => x.id === outro.chaletId);
+            throw new DemoApiError(
+              409,
+              `Este usuário já é familiar do chalé ${c?.number ?? "?"}. Remova o vínculo atual antes de torná-lo proprietário.`,
+            );
+          }
+        }
+        chalet.ownerId = novoDono;
         // Dono não é familiar de si mesmo: não pode ocupar vaga de familiar.
         if (chalet.ownerId) {
           db.chaletMembers = (db.chaletMembers ?? []).filter(

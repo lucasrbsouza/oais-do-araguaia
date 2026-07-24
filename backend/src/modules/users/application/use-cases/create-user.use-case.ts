@@ -37,6 +37,15 @@ export class CreateUserUseCase {
       throw new ConflictError('Já existe um usuário com este nome.');
     }
 
+    // A dependência é opcional por causa do ciclo Users ⟷ Chalets. Sem este
+    // guarda, uma falha de injeção criaria o usuário e ignoraria o vínculo em
+    // silêncio — o pior tipo de bug, porque a tela não acusa nada.
+    if (input.memberChaletId && !this.chaletRepository) {
+      throw new ConflictError(
+        'Não foi possível vincular o familiar ao chalé. Tente pela tela de Chalés.',
+      );
+    }
+
     if (input.memberChaletId && this.chaletRepository) {
       const chalet = await this.chaletRepository.findById(input.memberChaletId);
       if (!chalet) {

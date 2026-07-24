@@ -57,6 +57,24 @@ describe('CreateUserUseCase', () => {
     expect(result).not.toHaveProperty('passwordHash');
   });
 
+  it('não cria o usuário se o vínculo com o chalé não puder ser feito', async () => {
+    // Sem o ChaletRepository (ciclo Users ⟷ Chalets) o vínculo seria ignorado
+    // em silêncio: melhor recusar do que criar um familiar solto.
+    const repo = makeRepo();
+    const useCase = new CreateUserUseCase(repo);
+
+    await expect(
+      useCase.execute({
+        name: 'Familiar',
+        email: 'familiar@test.com',
+        password: 'Senha@123',
+        role: 'OWNER',
+        memberChaletId: 'c1',
+      }),
+    ).rejects.toThrow(ConflictError);
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+
   it('bloqueia e-mail duplicado', async () => {
     const repo = makeRepo({ findByEmail: jest.fn().mockResolvedValue(user) });
     const useCase = new CreateUserUseCase(repo);

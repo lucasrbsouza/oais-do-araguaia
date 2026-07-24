@@ -88,10 +88,24 @@ export class UpdateChaletUseCase {
         throw new NotFoundError('Proprietário não encontrado.');
       }
     }
-    // Dono não é familiar de si mesmo: virar proprietário desfaz o vínculo de
-    // membro no mesmo chalé, que senão ocuparia uma das 4 vagas de familiar.
-    // Antes do update para a resposta já sair sem ele na lista.
     if (input.ownerId) {
+      // Vínculo é um só: quem já é familiar de OUTRO chalé não vira dono deste
+      // sem antes soltar o vínculo — mesma regra que AddChaletMemberUseCase
+      // aplica no sentido inverso. Checado antes de qualquer escrita.
+      const vinculos = await this.chaletRepository.findAccessibleByUser(
+        input.ownerId,
+      );
+      const familiarDeOutro = vinculos.find(
+        (c) => c.id !== input.id && c.ownerId !== input.ownerId,
+      );
+      if (familiarDeOutro) {
+        throw new ConflictError(
+          `Este usuário já é familiar do chalé ${familiarDeOutro.number}. Remova o vínculo atual antes de torná-lo proprietário.`,
+        );
+      }
+      // Dono não é familiar de si mesmo: virar proprietário desfaz o vínculo de
+      // membro no mesmo chalé, que senão ocuparia uma das 4 vagas de familiar.
+      // Antes do update para a resposta já sair sem ele na lista.
       await this.chaletRepository.removeMember(input.id, input.ownerId);
     }
     const updated = await this.chaletRepository.update(input.id, {

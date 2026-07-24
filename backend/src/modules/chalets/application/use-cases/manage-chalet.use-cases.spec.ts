@@ -120,6 +120,20 @@ describe('UpdateChaletUseCase', () => {
     expect(repo.removeMember).toHaveBeenCalledWith('c1', 'u1');
   });
 
+  it('não torna proprietário quem já é familiar de outro chalé', async () => {
+    const repo = makeChaletRepo({
+      findAccessibleByUser: jest
+        .fn()
+        .mockResolvedValue([{ ...chalet, id: 'c2', number: 2, ownerId: 'x' }]),
+    });
+    const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
+    await expect(
+      useCase.execute({ id: 'c1', ownerId: 'u1' }, admin),
+    ).rejects.toThrow(ConflictError);
+    expect(repo.update).not.toHaveBeenCalled();
+    expect(repo.removeMember).not.toHaveBeenCalled();
+  });
+
   it('editar sem trocar o dono não mexe nos familiares', async () => {
     const repo = makeChaletRepo();
     const useCase = new UpdateChaletUseCase(repo, makeUserRepo());
