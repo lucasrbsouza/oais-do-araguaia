@@ -118,7 +118,10 @@ describe('UpdateChaletUseCase', () => {
       makeUserRepo(),
       makeOccupancy(),
     );
-    await useCase.execute({ id: 'c1', name: 'Novo nome', ownerId: 'u1' }, admin);
+    await useCase.execute(
+      { id: 'c1', name: 'Novo nome', ownerId: 'u1' },
+      admin,
+    );
     expect(repo.update).toHaveBeenCalledWith(
       'c1',
       expect.objectContaining({ name: 'Novo nome', ownerId: 'u1' }),
@@ -153,7 +156,11 @@ describe('UpdateChaletUseCase', () => {
 
   it('virar proprietário desfaz o vínculo de familiar no mesmo chalé', async () => {
     const repo = makeChaletRepo();
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
+    );
     await useCase.execute({ id: 'c1', ownerId: 'u1' }, admin);
     expect(repo.removeMember).toHaveBeenCalledWith('c1', 'u1');
   });
@@ -164,7 +171,11 @@ describe('UpdateChaletUseCase', () => {
         .fn()
         .mockResolvedValue([{ ...chalet, id: 'c2', number: 2, ownerId: 'x' }]),
     });
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
+    );
     await expect(
       useCase.execute({ id: 'c1', ownerId: 'u1' }, admin),
     ).rejects.toThrow(ConflictError);
@@ -174,14 +185,22 @@ describe('UpdateChaletUseCase', () => {
 
   it('editar sem trocar o dono não mexe nos familiares', async () => {
     const repo = makeChaletRepo();
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
+    );
     await useCase.execute({ id: 'c1', name: 'Só o nome' }, admin);
     expect(repo.removeMember).not.toHaveBeenCalled();
   });
 
   it('proprietário edita o nome do próprio chalé', async () => {
     const repo = makeChaletRepo();
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
+    );
     await useCase.execute({ id: 'c1', name: 'Meu Chalé' }, owner);
     expect(repo.update).toHaveBeenCalledWith(
       'c1',
@@ -193,14 +212,22 @@ describe('UpdateChaletUseCase', () => {
     const repo = makeChaletRepo({
       findById: jest.fn().mockResolvedValue({ ...chalet, ownerId: 'outro' }),
     });
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
+    );
     await expect(
       useCase.execute({ id: 'c1', name: 'X' }, owner),
     ).rejects.toThrow(ForbiddenError);
   });
 
   it('proprietário não transfere a propriedade', async () => {
-    const useCase = new UpdateChaletUseCase(makeChaletRepo(), makeUserRepo(), makeOccupancy());
+    const useCase = new UpdateChaletUseCase(
+      makeChaletRepo(),
+      makeUserRepo(),
+      makeOccupancy(),
+    );
     await expect(
       useCase.execute({ id: 'c1', ownerId: 'outro' }, owner),
     ).rejects.toThrow(ForbiddenError);
@@ -210,7 +237,11 @@ describe('UpdateChaletUseCase', () => {
     const repo = makeChaletRepo({
       findById: jest.fn().mockResolvedValue(null),
     });
-    const useCase = new UpdateChaletUseCase(repo, makeUserRepo(), makeOccupancy());
+    const useCase = new UpdateChaletUseCase(
+      repo,
+      makeUserRepo(),
+      makeOccupancy(),
+    );
     await expect(
       useCase.execute({ id: 'x', name: 'Y' }, admin),
     ).rejects.toThrow(NotFoundError);

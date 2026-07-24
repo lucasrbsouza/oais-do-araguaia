@@ -16,10 +16,8 @@ import {
   ApiPropertyOptional,
   ApiTags,
 } from '@nestjs/swagger';
-import { ChaletStatus } from '@prisma/client';
 import {
   IsEmail,
-  IsEnum,
   IsInt,
   IsOptional,
   IsString,
