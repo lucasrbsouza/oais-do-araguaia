@@ -74,7 +74,7 @@ find "$BACKUP_DIR" -name 'uploads_*.tar.gz' -mtime "+$RETENTION_DAYS" -delete
 # junto. Se RCLONE_REMOTE estiver definido no .env (ex.: gdrive:oais-backups),
 # envia os dois arquivos do dia e poda no destino o que passou da retenção.
 # Sem a variável, este bloco é ignorado e o backup fica só local.
-RCLONE_REMOTE="$(grep -E '^RCLONE_REMOTE=' "$ENV_FILE" | cut -d= -f2- || true)"
+RCLONE_REMOTE="$(grep -E '^RCLONE_REMOTE=' .env | cut -d= -f2- || true)"
 
 if [[ -n "$RCLONE_REMOTE" ]] && command -v rclone > /dev/null; then
   if rclone copy "$DB_FILE" "$RCLONE_REMOTE/" && rclone copy "$UP_FILE" "$RCLONE_REMOTE/"; then
