@@ -13,6 +13,9 @@ export default function DashboardPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api<DashboardSummary>("/dashboard"),
+    // Vários condôminos mexem no sistema ao mesmo tempo: com a tela aberta, o
+    // painel acompanha as reservas dos outros sem precisar recarregar.
+    refetchInterval: 60_000,
   });
 
   if (isLoading) {
