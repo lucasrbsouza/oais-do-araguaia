@@ -88,9 +88,7 @@ export class UpdateEventUseCase {
 
 @Injectable()
 export class CancelEventUseCase {
-  constructor(
-    private readonly eventRepository: EventRepository,
-  ) {}
+  constructor(private readonly eventRepository: EventRepository) {}
 
   async execute(eventId: string, cancelledById: string): Promise<Event> {
     const event = await this.eventRepository.findById(eventId);
@@ -113,9 +111,7 @@ export class CancelEventUseCase {
 
 @Injectable()
 export class DeleteEventUseCase {
-  constructor(
-    private readonly eventRepository: EventRepository,
-  ) {}
+  constructor(private readonly eventRepository: EventRepository) {}
 
   async execute(eventId: string, deletedById: string): Promise<void> {
     const event = await this.eventRepository.findById(eventId);
@@ -199,9 +195,7 @@ export class CloseEventUseCase {
 
 @Injectable()
 export class ReopenEventUseCase {
-  constructor(
-    private readonly eventRepository: EventRepository,
-  ) {}
+  constructor(private readonly eventRepository: EventRepository) {}
 
   async execute(eventId: string, reopenedById: string): Promise<Event> {
     const event = await this.eventRepository.findById(eventId);

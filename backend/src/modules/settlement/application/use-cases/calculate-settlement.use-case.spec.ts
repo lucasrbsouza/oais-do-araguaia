@@ -27,7 +27,13 @@ const makeRepo = (
     eventId: 'e1',
     eventStatus: 'OPEN',
     stays: [
-      { chaletId: 'c1', adults: 2, children: 0, alcoholConsumers: 0, nights: 1 },
+      {
+        chaletId: 'c1',
+        adults: 2,
+        children: 0,
+        alcoholConsumers: 0,
+        nights: 1,
+      },
     ],
     commonTotalCents: 1000,
     alcoholTotalCents: 0,

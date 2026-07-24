@@ -53,7 +53,13 @@ const makeSettlementRepo = (): SettlementRepository => ({
     eventId: 'e1',
     eventStatus: 'OPEN',
     stays: [
-      { chaletId: 'c1', adults: 1, children: 0, alcoholConsumers: 0, nights: 1 },
+      {
+        chaletId: 'c1',
+        adults: 1,
+        children: 0,
+        alcoholConsumers: 0,
+        nights: 1,
+      },
     ],
     commonTotalCents: 500,
     alcoholTotalCents: 0,
@@ -120,11 +126,7 @@ describe('CloseEventUseCase', () => {
 
   it('fecha calculando e congelando o rateio', async () => {
     const repo = makeEventRepo();
-    const useCase = new CloseEventUseCase(
-      repo,
-      makeSettlementRepo(),
-      strategy,
-    );
+    const useCase = new CloseEventUseCase(repo, makeSettlementRepo(), strategy);
 
     const result = await useCase.execute('e1', 'admin');
 
@@ -141,11 +143,7 @@ describe('CloseEventUseCase', () => {
     const repo = makeEventRepo({
       findById: jest.fn().mockResolvedValue(closedEvent),
     });
-    const useCase = new CloseEventUseCase(
-      repo,
-      makeSettlementRepo(),
-      strategy,
-    );
+    const useCase = new CloseEventUseCase(repo, makeSettlementRepo(), strategy);
     await expect(useCase.execute('e1', 'admin')).rejects.toThrow(ConflictError);
   });
 });
@@ -172,9 +170,9 @@ describe('UpdateEventUseCase', () => {
       findById: jest.fn().mockResolvedValue(closedEvent),
     });
     const useCase = new UpdateEventUseCase(repo);
-    await expect(
-      useCase.execute({ id: 'e1', name: 'X' }),
-    ).rejects.toThrow(ConflictError);
+    await expect(useCase.execute({ id: 'e1', name: 'X' })).rejects.toThrow(
+      ConflictError,
+    );
   });
 
   it('bloqueia sobreposição com outro evento ao mudar datas', async () => {

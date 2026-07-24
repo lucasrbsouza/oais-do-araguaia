@@ -21,10 +21,7 @@ export function nightsOf(stay: StayPeriod): number {
 
 /** Saída efetiva: o bate-volta ocupa a suíte pelo dia da entrada. */
 function occupiedUntil(stay: StayPeriod): number {
-  return Math.max(
-    stay.checkOut.getTime(),
-    stay.checkIn.getTime() + MS_PER_DAY,
-  );
+  return Math.max(stay.checkOut.getTime(), stay.checkIn.getTime() + MS_PER_DAY);
 }
 
 /**

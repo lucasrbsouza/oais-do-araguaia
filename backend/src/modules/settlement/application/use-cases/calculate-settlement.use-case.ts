@@ -30,7 +30,9 @@ export class CalculateSettlementUseCase {
       throw new ConflictError('Evento encerrado: o rateio está congelado.');
     }
     if (input.eventStatus === EventStatus.CANCELLED) {
-      throw new ConflictError('Evento cancelado: o rateio não está disponível.');
+      throw new ConflictError(
+        'Evento cancelado: o rateio não está disponível.',
+      );
     }
 
     const shares = this.strategy.calculate({

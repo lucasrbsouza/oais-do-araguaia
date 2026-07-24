@@ -54,7 +54,12 @@ describe('LoginUseCase', () => {
       findByEmail: jest.fn().mockResolvedValue(user),
     } as unknown as UserRepository;
     const refreshRepo = makeRefreshRepo();
-    const useCase = new LoginUseCase(userRepo, refreshRepo, tokenService, audit);
+    const useCase = new LoginUseCase(
+      userRepo,
+      refreshRepo,
+      tokenService,
+      audit,
+    );
 
     const result = await useCase.execute({
       email: user.email,
@@ -72,7 +77,12 @@ describe('LoginUseCase', () => {
     const userRepo = {
       findByEmail: jest.fn().mockResolvedValue(user),
     } as unknown as UserRepository;
-    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService, audit);
+    const useCase = new LoginUseCase(
+      userRepo,
+      makeRefreshRepo(),
+      tokenService,
+      audit,
+    );
     await expect(
       useCase.execute({ email: user.email, password: 'errada-123' }),
     ).rejects.toThrow(UnauthorizedError);
@@ -83,7 +93,12 @@ describe('LoginUseCase', () => {
     const userRepo = {
       findByEmail: jest.fn().mockResolvedValue(user),
     } as unknown as UserRepository;
-    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService, audit);
+    const useCase = new LoginUseCase(
+      userRepo,
+      makeRefreshRepo(),
+      tokenService,
+      audit,
+    );
     await expect(
       useCase.execute({ email: user.email, password: 'Senha@123' }),
     ).rejects.toThrow(UnauthorizedError);
@@ -93,7 +108,12 @@ describe('LoginUseCase', () => {
     const userRepo = {
       findByEmail: jest.fn().mockResolvedValue(null),
     } as unknown as UserRepository;
-    const useCase = new LoginUseCase(userRepo, makeRefreshRepo(), tokenService, audit);
+    const useCase = new LoginUseCase(
+      userRepo,
+      makeRefreshRepo(),
+      tokenService,
+      audit,
+    );
     await expect(
       useCase.execute({ email: 'x@x.com', password: 'Senha@123' }),
     ).rejects.toThrow(UnauthorizedError);

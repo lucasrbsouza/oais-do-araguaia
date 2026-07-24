@@ -1,7 +1,10 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { ConflictError, NotFoundError } from '../../../../shared/domain/domain-error';
+import {
+  ConflictError,
+  NotFoundError,
+} from '../../../../shared/domain/domain-error';
 import { ChaletRepository } from '../../../chalets/domain/chalet.repository';
 import { UserRepository } from '../../domain/user.repository';
 import { toUserResponse, UserResponse } from '../user.mapper';
@@ -39,7 +42,9 @@ export class CreateUserUseCase {
       if (!chalet) {
         throw new NotFoundError('Chalé não encontrado.');
       }
-      const count = await this.chaletRepository.countMembers(input.memberChaletId);
+      const count = await this.chaletRepository.countMembers(
+        input.memberChaletId,
+      );
       if (count >= 4) {
         throw new ConflictError(
           'Este chalé já atingiu o limite de 5 usuários (1 dono + 4 familiares).',
