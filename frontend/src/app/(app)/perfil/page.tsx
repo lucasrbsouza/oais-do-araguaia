@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   Camera,
   KeyRound,
   Mail,
@@ -10,12 +11,14 @@ import {
   Shield,
   User as UserIcon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { api, getAvatarUrl } from "@/lib/api";
 import type { UserItem } from "@/lib/types";
 import { useSession } from "@/stores/session";
+import { lerUltimaRota } from "@/lib/ultima-rota";
 import { UserAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -51,12 +54,17 @@ function formatDate(iso: string): string {
 
 export default function ProfilePage() {
   const { user: sessionUser, setSession, accessToken } = useSession();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  const voltar = useCallback(() => {
+    router.push(lerUltimaRota());
+  }, [router]);
 
   const {
     data: profile,
@@ -174,7 +182,17 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-bold text-ink">Meu perfil</h1>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={voltar}
+          className="rounded-full p-1.5 text-muted transition-colors hover:bg-surface-soft"
+          aria-label="Voltar"
+        >
+          <ArrowLeft className="size-5" />
+        </button>
+        <h1 className="text-2xl font-bold text-ink">Meu perfil</h1>
+      </div>
 
       {/* ── Avatar + Info Card ─────────────────────── */}
       <Card className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">

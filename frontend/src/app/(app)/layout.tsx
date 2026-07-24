@@ -18,6 +18,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { IS_DEMO, logout, tryRefreshSession } from "@/lib/api";
+import { guardarUltimaRota } from "@/lib/ultima-rota";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/stores/session";
 import { UserAvatar } from "@/components/ui/avatar";
@@ -64,6 +65,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setFirstLoginPrompt(true);
     }
   }, [status, user?.mustChangePassword]);
+
+  // Guarda a tela atual para o botão de voltar do perfil saber a origem.
+  useEffect(() => {
+    guardarUltimaRota(pathname);
+  }, [pathname]);
 
   useEffect(() => {
     if (!menuOpen) return;
