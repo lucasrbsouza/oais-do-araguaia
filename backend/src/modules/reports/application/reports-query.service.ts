@@ -8,6 +8,7 @@ import { AuthenticatedUser } from '../../../shared/infrastructure/auth/decorator
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
 import {
   derivePaymentStatus,
+  netPaidCents,
   PaymentStatus,
 } from '../../payments/domain/payment-status';
 
@@ -37,6 +38,8 @@ export interface EventReport {
     totalCents: number;
     advanceCents: number;
     paidCents: number;
+    /** Devoluções já pagas ao chalé (crédito quitado). */
+    refundedCents: number;
     paymentStatus: PaymentStatus;
   }> | null;
 }
@@ -55,6 +58,8 @@ export interface ChaletEventReport {
   alcoholCents: number;
   totalCents: number;
   paidCents: number;
+  /** Devoluções já pagas ao chalé (crédito quitado). */
+  refundedCents: number;
   paymentStatus: PaymentStatus;
   payments: Array<{ date: Date; amountCents: number; notes: string | null }>;
 }
@@ -70,6 +75,7 @@ export class ReportsQueryService {
         reservations: { where: { status: 'ACTIVE' } },
         purchases: true,
         payments: true,
+        receivables: { where: { status: 'SETTLED' } },
         settlement: {
           include: {
             items: {
@@ -121,6 +127,13 @@ export class ReportsQueryService {
         );
       }
     }
+    const refundByChalet = new Map<string, number>();
+    for (const receivable of event.receivables) {
+      refundByChalet.set(
+        receivable.chaletId,
+        (refundByChalet.get(receivable.chaletId) ?? 0) + receivable.amountCents,
+      );
+    }
 
     return {
       event: {
@@ -151,6 +164,7 @@ export class ReportsQueryService {
         event.settlement?.items.map((item) => {
           const paidCents = paidByChalet.get(item.chaletId) ?? 0;
           const advanceCents = advanceByChalet.get(item.chaletId) ?? 0;
+          const refundedCents = refundByChalet.get(item.chaletId) ?? 0;
           return {
             chaletNumber: item.chalet.number,
             chaletName: item.chalet.name,
@@ -160,9 +174,10 @@ export class ReportsQueryService {
             totalCents: item.totalCents,
             advanceCents,
             paidCents,
+            refundedCents,
             paymentStatus: derivePaymentStatus(
               item.totalCents,
-              paidCents + advanceCents,
+              netPaidCents(paidCents, advanceCents, refundedCents),
             ),
           };
         }) ?? null,
@@ -196,6 +211,7 @@ export class ReportsQueryService {
       include: {
         reservations: { where: { chaletId, status: 'ACTIVE' } },
         payments: { where: { chaletId }, orderBy: { date: 'asc' } },
+        receivables: { where: { chaletId, status: 'SETTLED' } },
         settlement: { include: { items: { where: { chaletId } } } },
       },
     });
@@ -206,6 +222,10 @@ export class ReportsQueryService {
     const item = event.settlement?.items[0];
     const reservation = event.reservations[0] ?? null;
     const paidCents = event.payments.reduce((sum, p) => sum + p.amountCents, 0);
+    const refundedCents = event.receivables.reduce(
+      (sum, r) => sum + r.amountCents,
+      0,
+    );
     const totalCents = item?.totalCents ?? 0;
 
     return {
@@ -229,7 +249,11 @@ export class ReportsQueryService {
       alcoholCents: item?.alcoholCents ?? 0,
       totalCents,
       paidCents,
-      paymentStatus: derivePaymentStatus(totalCents, paidCents),
+      refundedCents,
+      paymentStatus: derivePaymentStatus(
+        totalCents,
+        netPaidCents(paidCents, 0, refundedCents),
+      ),
       payments: event.payments.map((p) => ({
         date: p.date,
         amountCents: p.amountCents,

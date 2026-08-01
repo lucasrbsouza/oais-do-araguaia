@@ -4,6 +4,7 @@ import { todayAsUtcDate } from '../../shared/domain/stay';
 import { deriveChaletStatuses } from '../chalets/domain/chalet-occupancy';
 import {
   derivePaymentStatus,
+  netPaidCents,
   PaymentStatus,
 } from '../payments/domain/payment-status';
 
@@ -54,6 +55,7 @@ export class DashboardQueryService {
         include: {
           purchases: { select: { amountCents: true } },
           payments: true,
+          receivables: { where: { status: 'SETTLED' } },
           settlement: { include: { items: true } },
         },
       }),
@@ -79,11 +81,23 @@ export class DashboardQueryService {
           (paidByChalet.get(payment.chaletId) ?? 0) + payment.amountCents,
         );
       }
+      const refundByChalet = new Map<string, number>();
+      for (const receivable of lastEvent.receivables) {
+        refundByChalet.set(
+          receivable.chaletId,
+          (refundByChalet.get(receivable.chaletId) ?? 0) +
+            receivable.amountCents,
+        );
+      }
       const items = lastEvent.settlement?.items ?? [];
       const statuses = items.map((item) =>
         derivePaymentStatus(
           item.totalCents,
-          paidByChalet.get(item.chaletId) ?? 0,
+          netPaidCents(
+            paidByChalet.get(item.chaletId) ?? 0,
+            0,
+            refundByChalet.get(item.chaletId) ?? 0,
+          ),
         ),
       );
       lastEventSummary = {

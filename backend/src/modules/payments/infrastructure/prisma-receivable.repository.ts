@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ReceivableStatus } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/database/prisma.service';
 import {
+  ChaletRefundTotal,
   ReceivableDetail,
   ReceivableRepository,
 } from '../domain/receivable.repository';
@@ -25,6 +26,18 @@ export class PrismaReceivableRepository implements ReceivableRepository {
       include: DETAIL_INCLUDE,
       orderBy: { chalet: { number: 'asc' } },
     });
+  }
+
+  async settledTotalsByEvent(eventId: string): Promise<ChaletRefundTotal[]> {
+    const groups = await this.prisma.receivable.groupBy({
+      by: ['chaletId'],
+      where: { eventId, status: ReceivableStatus.SETTLED },
+      _sum: { amountCents: true },
+    });
+    return groups.map((g) => ({
+      chaletId: g.chaletId,
+      totalCents: g._sum.amountCents ?? 0,
+    }));
   }
 
   listOpen(): Promise<ReceivableDetail[]> {

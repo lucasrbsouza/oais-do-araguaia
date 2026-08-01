@@ -644,9 +644,30 @@ function advancesByChalet(db: Db, eventId: string): Map<string, number> {
   return map;
 }
 
+/** Total já devolvido (contas a receber quitadas) por chalé no evento. */
+function refundsByChalet(db: Db, eventId: string): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const r of db.receivables) {
+    if (r.eventId === eventId && r.status === "SETTLED") {
+      map.set(r.chaletId, (map.get(r.chaletId) ?? 0) + r.amountCents);
+    }
+  }
+  return map;
+}
+
+/**
+ * Quanto o chalé de fato bancou: pagamentos + adiantamentos − devoluções já
+ * quitadas. Descontar a devolução é o que mantém visível a dívida de quem
+ * recebeu crédito de volta e depois teve o rateio recalculado para cima.
+ */
+const netPaidCents = (paid: number, advance: number, refunded: number): number =>
+  paid + advance - refunded;
+
 /**
  * Gera contas a receber a cada rateio: excedente de pago + adiantado sobre
  * o devido. Devoluções já quitadas ficam no histórico e abatem o crédito.
+ * Saldo negativo não vira conta a receber: aí o chalé é que deve, e isso
+ * aparece como saldo devedor na tela de pagamentos.
  */
 function generateReceivables(db: Db, eventId: string, settlement: DbSettlement): void {
   db.receivables = db.receivables.filter(
@@ -1370,12 +1391,15 @@ function route(db: Db, req: DemoRequest): unknown {
       throw new DemoApiError(404, "Rateio ainda não calculado para este evento.");
     }
     const advances = advancesByChalet(db, seg[1]);
+    const refunds = refundsByChalet(db, seg[1]);
     const view: ChaletPaymentSummary[] = settlementView(db, settlement).items.map((item) => {
       const payments = db.payments.filter(
         (p) => p.eventId === seg[1] && p.chaletId === item.chaletId,
       );
       const paidCents = payments.reduce((s, p) => s + p.amountCents, 0);
       const advanceCents = advances.get(item.chaletId) ?? 0;
+      const refundedCents = refunds.get(item.chaletId) ?? 0;
+      const netPaid = netPaidCents(paidCents, advanceCents, refundedCents);
       const chalet = db.chalets.find((c) => c.id === item.chaletId);
       const chaletOwner = db.users.find((u) => u.id === chalet?.ownerId);
       return {
@@ -1386,8 +1410,9 @@ function route(db: Db, req: DemoRequest): unknown {
         owedCents: item.totalCents,
         paidCents,
         advanceCents,
-        balanceCents: item.totalCents - paidCents - advanceCents,
-        status: derivePaymentStatus(item.totalCents, paidCents + advanceCents),
+        refundedCents,
+        balanceCents: item.totalCents - netPaid,
+        status: derivePaymentStatus(item.totalCents, netPaid),
         payments: payments.map((p) => ({
           id: p.id,
           date: p.date,
@@ -1840,6 +1865,7 @@ function route(db: Db, req: DemoRequest): unknown {
               .filter((p) => p.eventId === event.id && p.chaletId === item.chaletId)
               .reduce((s, p) => s + p.amountCents, 0);
             const advance = advancesByChalet(db, event.id).get(item.chaletId) ?? 0;
+            const refunded = refundsByChalet(db, event.id).get(item.chaletId) ?? 0;
             const chalet = db.chalets.find((c) => c.id === item.chaletId);
             const chaletOwner = db.users.find((u) => u.id === chalet?.ownerId);
             return {
@@ -1851,7 +1877,11 @@ function route(db: Db, req: DemoRequest): unknown {
               totalCents: item.totalCents,
               advanceCents: advance,
               paidCents: paid,
-              paymentStatus: derivePaymentStatus(item.totalCents, paid + advance),
+              refundedCents: refunded,
+              paymentStatus: derivePaymentStatus(
+                item.totalCents,
+                netPaidCents(paid, advance, refunded),
+              ),
             };
           })
         : null,
@@ -1869,11 +1899,15 @@ function route(db: Db, req: DemoRequest): unknown {
     if (lastEvent) {
       const settlement = db.settlements.find((s) => s.eventId === lastEvent.id);
       const items = settlement ? settlementView(db, settlement).items : [];
+      const refunds = refundsByChalet(db, lastEvent.id);
       const statuses = items.map((item) => {
         const paid = db.payments
           .filter((p) => p.eventId === lastEvent.id && p.chaletId === item.chaletId)
           .reduce((s, p) => s + p.amountCents, 0);
-        return derivePaymentStatus(item.totalCents, paid);
+        return derivePaymentStatus(
+          item.totalCents,
+          netPaidCents(paid, 0, refunds.get(item.chaletId) ?? 0),
+        );
       });
       lastEventSummary = {
         ...lastEvent,

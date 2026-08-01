@@ -11,9 +11,11 @@ import { PurchaseRepository } from '../../../purchases/domain/purchase.repositor
 import { SettlementRepository } from '../../../settlement/domain/settlement.repository';
 import {
   derivePaymentStatus,
+  netPaidCents,
   PaymentStatus,
 } from '../../domain/payment-status';
 import { PaymentRepository } from '../../domain/payment.repository';
+import { ReceivableRepository } from '../../domain/receivable.repository';
 
 export interface RegisterPaymentInput {
   eventId: string;
@@ -32,7 +34,12 @@ export interface ChaletPaymentSummary {
   paidCents: number;
   /** Compras/adiantamentos lançados vinculados ao chalé. */
   advanceCents: number;
-  /** Saldo devedor: devido − pago − adiantamentos (negativo = crédito). */
+  /** Devoluções já pagas ao chalé (crédito quitado). */
+  refundedCents: number;
+  /**
+   * Saldo devedor: devido − pago − adiantamentos + devoluções já quitadas
+   * (negativo = crédito ainda a devolver).
+   */
   balanceCents: number;
   status: PaymentStatus;
   payments: Array<{
@@ -74,6 +81,7 @@ export class GetEventPaymentsUseCase {
     private readonly purchaseRepository: PurchaseRepository,
     private readonly settlementRepository: SettlementRepository,
     private readonly chaletRepository: ChaletRepository,
+    private readonly receivableRepository: ReceivableRepository,
   ) {}
 
   async execute(
@@ -96,6 +104,12 @@ export class GetEventPaymentsUseCase {
     const advances = await this.purchaseRepository.advancesByEvent(eventId);
     const advancesByChalet = new Map(
       advances.map((a) => [a.chaletId, a.totalCents]),
+    );
+
+    const refunds =
+      await this.receivableRepository.settledTotalsByEvent(eventId);
+    const refundsByChalet = new Map(
+      refunds.map((r) => [r.chaletId, r.totalCents]),
     );
 
     const chalets = await this.chaletRepository.list();
@@ -122,6 +136,8 @@ export class GetEventPaymentsUseCase {
         0,
       );
       const advanceCents = advancesByChalet.get(item.chaletId) ?? 0;
+      const refundedCents = refundsByChalet.get(item.chaletId) ?? 0;
+      const netPaid = netPaidCents(paidCents, advanceCents, refundedCents);
       return {
         chaletId: item.chaletId,
         chaletNumber: item.chaletNumber,
@@ -130,8 +146,9 @@ export class GetEventPaymentsUseCase {
         owedCents: item.totalCents,
         paidCents,
         advanceCents,
-        balanceCents: item.totalCents - paidCents - advanceCents,
-        status: derivePaymentStatus(item.totalCents, paidCents + advanceCents),
+        refundedCents,
+        balanceCents: item.totalCents - netPaid,
+        status: derivePaymentStatus(item.totalCents, netPaid),
         payments: chaletPayments.map((p) => ({
           id: p.id,
           date: p.date,

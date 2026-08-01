@@ -45,6 +45,9 @@ export async function syncEventReceivables(
     settled.map((s) => [s.chaletId, s._sum.amountCents ?? 0]),
   );
 
+  // Saldo negativo não vira conta a receber: aí o chalé é que deve, e isso
+  // aparece como saldo devedor na tela de pagamentos e nos relatórios, que
+  // descontam do valor pago as devoluções já quitadas (`netPaidCents`).
   const credits = shares
     .map((share) => ({
       chaletId: share.chaletId,

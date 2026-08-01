@@ -7,11 +7,18 @@ import { api, downloadFile, IS_DEMO } from "@/lib/api";
 import { formatCents } from "@/lib/format";
 import type { EventReport } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { PaymentStatusBadge } from "@/components/ui/badge";
 import { Table, Td, Th } from "@/components/ui/table";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/states";
+
+/**
+ * Mesmo motivo da aba de pagamentos: com a coluna de devolvido a tabela do
+ * rateio estoura o container em 1280px. `xl:px-2` só aperta o modo tabela.
+ */
+const cell = "xl:px-2";
 
 export function ReportTab({ eventId }: { eventId: string }) {
   const [exporting, setExporting] = useState<"xlsx" | "pdf" | null>(null);
@@ -40,6 +47,10 @@ export function ReportTab({ eventId }: { eventId: string }) {
   if (isLoading) return <TableSkeleton />;
   if (error) return <ErrorState message={(error as Error).message} />;
   if (!data) return null;
+
+  // Coluna de devolvido só quando houver devolução quitada, como na aba de
+  // pagamentos: senão o rateio ganharia uma coluna de zeros.
+  const hasRefunds = data.settlement?.some((row) => row.refundedCents > 0) ?? false;
 
   return (
     <div className="space-y-6">
@@ -138,35 +149,43 @@ export function ReportTab({ eventId }: { eventId: string }) {
             <Table>
               <thead>
                 <tr>
-                  <Th>Chalé</Th>
-                  <Th>Proprietário</Th>
-                  <Th className="text-right">Comum</Th>
-                  <Th className="text-right">Álcool</Th>
-                  <Th className="text-right">Total</Th>
-                  <Th className="text-right">Adiantado</Th>
-                  <Th className="text-right">Pago</Th>
-                  <Th>Status</Th>
+                  <Th className={cell}>Chalé</Th>
+                  <Th className={cell}>Proprietário</Th>
+                  <Th className={cn(cell, "text-right")}>Comum</Th>
+                  <Th className={cn(cell, "text-right")}>Álcool</Th>
+                  <Th className={cn(cell, "text-right")}>Total</Th>
+                  <Th className={cn(cell, "text-right")}>Adiantado</Th>
+                  <Th className={cn(cell, "text-right")}>Pago</Th>
+                  {hasRefunds && <Th className={cn(cell, "text-right")}>Devolvido</Th>}
+                  <Th className={cell}>Status</Th>
                 </tr>
               </thead>
               <tbody>
                 {data.settlement.map((row) => (
                   <tr key={row.chaletNumber}>
-                    <Td label="Chalé" className="font-medium text-ink">
+                    <Td label="Chalé" className={cn(cell, "font-medium text-ink")}>
                       {row.chaletNumber} — {row.chaletName}
                     </Td>
-                    <Td label="Proprietário">
+                    <Td label="Proprietário" className={cell}>
                       {row.ownerName ?? <span className="text-muted-soft">—</span>}
                     </Td>
-                    <Td label="Comum" className="text-right">{formatCents(row.commonCents)}</Td>
-                    <Td label="Álcool" className="text-right">{formatCents(row.alcoholCents)}</Td>
-                    <Td label="Total" className="text-right font-semibold">
+                    <Td label="Comum" className={cn(cell, "text-right")}>{formatCents(row.commonCents)}</Td>
+                    <Td label="Álcool" className={cn(cell, "text-right")}>{formatCents(row.alcoholCents)}</Td>
+                    <Td label="Total" className={cn(cell, "text-right font-semibold")}>
                       {formatCents(row.totalCents)}
                     </Td>
-                    <Td label="Adiantado" className="text-right">
+                    <Td label="Adiantado" className={cn(cell, "text-right")}>
                       {formatCents(row.advanceCents)}
                     </Td>
-                    <Td label="Pago" className="text-right">{formatCents(row.paidCents)}</Td>
-                    <Td label="Status">
+                    <Td label="Pago" className={cn(cell, "text-right")}>{formatCents(row.paidCents)}</Td>
+                    {hasRefunds && (
+                      <Td label="Devolvido" className={cn(cell, "whitespace-nowrap text-right")}>
+                        {row.refundedCents > 0
+                          ? `− ${formatCents(row.refundedCents)}`
+                          : formatCents(0)}
+                      </Td>
+                    )}
+                    <Td label="Status" className={cell}>
                       <PaymentStatusBadge status={row.paymentStatus} />
                     </Td>
                   </tr>

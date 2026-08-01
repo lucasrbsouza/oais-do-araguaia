@@ -13,6 +13,7 @@ import {
 } from '../../settlement/domain/expense-sharing.strategy';
 import {
   derivePaymentStatus,
+  netPaidCents,
   PaymentStatus,
 } from '../../payments/domain/payment-status';
 
@@ -65,6 +66,8 @@ interface ChaletShareRow {
   totalCents: number;
   advanceCents: number;
   paidCents: number;
+  /** Devoluções já pagas ao chalé (crédito quitado). */
+  refundedCents: number;
   balanceCents: number;
   status: PaymentStatus;
 }
@@ -174,6 +177,7 @@ export class ReportExportService {
           include: { chalet: true },
         },
         payments: true,
+        receivables: { where: { status: 'SETTLED' } },
         settlement: {
           include: {
             items: {
@@ -243,6 +247,13 @@ export class ReportExportService {
         );
       }
     }
+    const refundByChalet = new Map<string, number>();
+    for (const receivable of event.receivables) {
+      refundByChalet.set(
+        receivable.chaletId,
+        (refundByChalet.get(receivable.chaletId) ?? 0) + receivable.amountCents,
+      );
+    }
 
     // Pesos em pessoa-diária, como no rateio oficial.
     const guestWeight = [...stayByChalet.values()].reduce(
@@ -259,6 +270,8 @@ export class ReportExportService {
         const stay = stayByChalet.get(item.chaletId);
         const paidCents = paidByChalet.get(item.chaletId) ?? 0;
         const advanceCents = advanceByChalet.get(item.chaletId) ?? 0;
+        const refundedCents = refundByChalet.get(item.chaletId) ?? 0;
+        const netPaid = netPaidCents(paidCents, advanceCents, refundedCents);
         return {
           chaletName: item.chalet.name,
           ownerName: item.chalet.owner?.name ?? null,
@@ -271,11 +284,9 @@ export class ReportExportService {
           totalCents: item.totalCents,
           advanceCents,
           paidCents,
-          balanceCents: paidCents + advanceCents - item.totalCents,
-          status: derivePaymentStatus(
-            item.totalCents,
-            paidCents + advanceCents,
-          ),
+          refundedCents,
+          balanceCents: netPaid - item.totalCents,
+          status: derivePaymentStatus(item.totalCents, netPaid),
         };
       },
     );
@@ -449,6 +460,13 @@ export class ReportExportService {
 
     // Bloco 4 — Acerto por chalé (total, adiantamentos, pagamentos, saldo)
     if (data.hasSettlement) {
+      // A coluna de devoluções só aparece quando algum chalé recebeu crédito de
+      // volta — sem isso o saldo final não fecha com as outras colunas.
+      const hasRefunds = data.shares.some((s) => s.refundedCents > 0);
+      const money = hasRefunds ? [3, 4, 5, 6, 7] : [3, 4, 5, 6];
+      const balanceCol = hasRefunds ? 7 : 6;
+      const refund = <T>(value: T): T[] => (hasRefunds ? [value] : []);
+
       sectionRow('VALOR POR CHALÉ — ACERTO');
       headerRow([
         'Chalé',
@@ -456,6 +474,7 @@ export class ReportExportService {
         'Total a pagar',
         'Adiantamentos',
         'Pagamentos',
+        ...refund('Devoluções'),
         'Saldo final',
         'Situação',
       ]);
@@ -466,25 +485,29 @@ export class ReportExportService {
           toReais(s.totalCents),
           toReais(s.advanceCents),
           toReais(s.paidCents),
+          ...refund(toReais(-s.refundedCents)),
           toReais(s.balanceCents),
           STATUS_LABELS[s.status],
         ]);
-        [3, 4, 5, 6].forEach((c) => (row.getCell(c).numFmt = MONEY_FMT));
+        money.forEach((c) => (row.getCell(c).numFmt = MONEY_FMT));
         if (s.balanceCents < 0) {
-          row.getCell(6).font = { color: { argb: 'FFC0392B' } };
+          row.getCell(balanceCol).font = { color: { argb: 'FFC0392B' } };
         }
       }
+      const sum = (pick: (r: ChaletShareRow) => number): number =>
+        data.shares.reduce((total, r) => total + pick(r), 0);
       const totals = sheet.addRow([
         'TOTAL GERAL',
         '',
-        toReais(data.shares.reduce((s, r) => s + r.totalCents, 0)),
-        toReais(data.shares.reduce((s, r) => s + r.advanceCents, 0)),
-        toReais(data.shares.reduce((s, r) => s + r.paidCents, 0)),
-        toReais(data.shares.reduce((s, r) => s + r.balanceCents, 0)),
+        toReais(sum((r) => r.totalCents)),
+        toReais(sum((r) => r.advanceCents)),
+        toReais(sum((r) => r.paidCents)),
+        ...refund(toReais(-sum((r) => r.refundedCents))),
+        toReais(sum((r) => r.balanceCents)),
         '',
       ]);
       totals.font = { bold: true };
-      [3, 4, 5, 6].forEach((c) => (totals.getCell(c).numFmt = MONEY_FMT));
+      money.forEach((c) => (totals.getCell(c).numFmt = MONEY_FMT));
     }
 
     return Buffer.from(await workbook.xlsx.writeBuffer());
@@ -720,14 +743,23 @@ export class ReportExportService {
 
       // Bloco 4 — Acerto por chalé
       if (data.hasSettlement) {
+        // Mesma regra do XLSX: coluna de devoluções só quando houver alguma.
+        const hasRefunds = data.shares.some((s) => s.refundedCents > 0);
+        const refund = <T,>(value: T): T[] => (hasRefunds ? [value] : []);
+        const sum = (pick: (r: ChaletShareRow) => number): number =>
+          data.shares.reduce((total, r) => total + pick(r), 0);
+
         sectionTitle('VALOR POR CHALÉ — ACERTO');
         drawTable(
           [
             'Chalé',
             'Proprietário',
             'Total a pagar',
-            'Adiantamentos',
+            // Com a coluna extra não sobra largura para o rótulo inteiro, e o
+            // PDF corta em "Adiantame…". O bloco de compras já usa "Adiant.".
+            hasRefunds ? 'Adiant.' : 'Adiantamentos',
             'Pagamentos',
+            ...refund('Devoluções'),
             'Saldo final',
             'Situação',
           ],
@@ -738,20 +770,24 @@ export class ReportExportService {
               formatMoney(s.totalCents),
               formatMoney(s.advanceCents),
               formatMoney(s.paidCents),
+              ...refund(formatMoney(-s.refundedCents)),
               formatMoney(s.balanceCents),
               STATUS_LABELS[s.status],
             ]),
             [
               'TOTAL GERAL',
               '',
-              formatMoney(data.shares.reduce((s, r) => s + r.totalCents, 0)),
-              formatMoney(data.shares.reduce((s, r) => s + r.advanceCents, 0)),
-              formatMoney(data.shares.reduce((s, r) => s + r.paidCents, 0)),
-              formatMoney(data.shares.reduce((s, r) => s + r.balanceCents, 0)),
+              formatMoney(sum((r) => r.totalCents)),
+              formatMoney(sum((r) => r.advanceCents)),
+              formatMoney(sum((r) => r.paidCents)),
+              ...refund(formatMoney(-sum((r) => r.refundedCents))),
+              formatMoney(sum((r) => r.balanceCents)),
               '',
             ],
           ],
-          [85, 85, 68, 68, 68, 66, 60],
+          hasRefunds
+            ? [78, 78, 62, 62, 62, 62, 60, 58]
+            : [85, 85, 68, 68, 68, 66, 60],
           { boldLastRow: true },
         );
       }

@@ -154,7 +154,12 @@ export interface ChaletPaymentSummary {
   paidCents: number;
   /** Compras/adiantamentos lançados vinculados ao chalé. */
   advanceCents: number;
-  /** Saldo devedor: devido − pago − adiantamentos (negativo = crédito). */
+  /** Devoluções já pagas ao chalé (crédito quitado). */
+  refundedCents: number;
+  /**
+   * Saldo devedor: devido − pago − adiantamentos + devoluções já quitadas
+   * (negativo = crédito ainda a devolver).
+   */
   balanceCents: number;
   status: PaymentStatus;
   payments: Array<{ id: string; date: string; amountCents: number; notes: string | null }>;
@@ -198,6 +203,8 @@ export interface EventReport {
     totalCents: number;
     advanceCents: number;
     paidCents: number;
+    /** Devoluções já pagas ao chalé (crédito quitado). */
+    refundedCents: number;
     paymentStatus: PaymentStatus;
   }> | null;
 }

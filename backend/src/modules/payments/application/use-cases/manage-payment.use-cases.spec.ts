@@ -12,6 +12,7 @@ import {
 } from '../../../settlement/domain/settlement.repository';
 import { PurchaseRepository } from '../../../purchases/domain/purchase.repository';
 import { PaymentRepository } from '../../domain/payment.repository';
+import { ReceivableRepository } from '../../domain/receivable.repository';
 import {
   GetEventPaymentsUseCase,
   RegisterPaymentUseCase,
@@ -88,6 +89,17 @@ const purchaseRepoWithAdvances = {
     .mockResolvedValue([{ chaletId: 'c2', totalCents: 1500 }]),
 } as unknown as PurchaseRepository;
 
+const receivableRepo = {
+  settledTotalsByEvent: jest.fn().mockResolvedValue([]),
+} as unknown as ReceivableRepository;
+
+/** c1 já recebeu de volta 800 dos 2000 que devia. */
+const receivableRepoWithRefund = {
+  settledTotalsByEvent: jest
+    .fn()
+    .mockResolvedValue([{ chaletId: 'c1', totalCents: 800 }]),
+} as unknown as ReceivableRepository;
+
 const chaletRepo = {
   findById: jest.fn().mockResolvedValue({ id: 'c1' }),
   findByOwner: jest.fn().mockResolvedValue([{ id: 'c1' }]),
@@ -142,6 +154,7 @@ describe('GetEventPaymentsUseCase', () => {
       purchaseRepo,
       settlementRepo,
       chaletRepo,
+      receivableRepo,
     );
     const result = await useCase.execute('e1', admin);
     expect(result).toHaveLength(2);
@@ -165,6 +178,7 @@ describe('GetEventPaymentsUseCase', () => {
       purchaseRepoWithAdvances,
       settlementRepo,
       chaletRepo,
+      receivableRepo,
     );
     const result = await useCase.execute('e1', admin);
     // c2 deve 1000, adiantou 1500 → quitado com crédito de 500.
@@ -176,12 +190,33 @@ describe('GetEventPaymentsUseCase', () => {
     });
   });
 
+  it('devolução já quitada volta a contar como valor devido', async () => {
+    const useCase = new GetEventPaymentsUseCase(
+      paymentRepo,
+      purchaseRepo,
+      settlementRepo,
+      chaletRepo,
+      receivableRepoWithRefund,
+    );
+    const result = await useCase.execute('e1', admin);
+    // c1 deve 2000, pagou 500 e já recebeu 800 de volta: bancou −300, então
+    // ainda deve 2300. Sem descontar a devolução o saldo daria 1500.
+    expect(result[0]).toMatchObject({
+      chaletId: 'c1',
+      paidCents: 500,
+      refundedCents: 800,
+      balanceCents: 2300,
+      status: 'PENDING',
+    });
+  });
+
   it('proprietário vê apenas o próprio chalé', async () => {
     const useCase = new GetEventPaymentsUseCase(
       paymentRepo,
       purchaseRepo,
       settlementRepo,
       chaletRepo,
+      receivableRepo,
     );
     const result = await useCase.execute('e1', owner);
     expect(result).toHaveLength(1);
@@ -198,6 +233,7 @@ describe('GetEventPaymentsUseCase', () => {
         findByOwner: jest.fn().mockResolvedValue([]),
         findAccessibleByUser: jest.fn().mockResolvedValue([]),
       } as unknown as ChaletRepository,
+      receivableRepo,
     );
     await expect(useCase.execute('e1', owner)).rejects.toThrow(ForbiddenError);
   });
@@ -210,6 +246,7 @@ describe('GetEventPaymentsUseCase', () => {
         findByEvent: jest.fn().mockResolvedValue(null),
       } as unknown as SettlementRepository,
       chaletRepo,
+      receivableRepo,
     );
     await expect(useCase.execute('e1', admin)).rejects.toThrow(NotFoundError);
   });

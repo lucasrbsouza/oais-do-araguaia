@@ -27,6 +27,15 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
+
+/**
+ * A tabela de contas a pagar tem colunas demais para o padding padrão: em
+ * 1280px (onde o modo tabela estreia com a MENOR largura que vai ter) ela
+ * estourava o container e escondia o botão de ação. `xl:px-2` devolve ~16px
+ * por coluna e só vale no modo tabela — no cartão do celular o padding cheio
+ * continua.
+ */
+const cell = "xl:px-2";
 type AccountsView = "payable" | "receivable";
 
 export function PaymentsTab({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }) {
@@ -116,42 +125,56 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
   }
   if (error) return <ErrorState message={(error as Error).message} />;
 
+  // A coluna de devoluções só entra quando algum chalé já recebeu crédito de
+  // volta — sem ela o saldo não fecharia com as outras colunas.
+  const hasRefunds = data?.some((item) => item.refundedCents > 0) ?? false;
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted">
-        Saldo = devido no rateio − pagamentos − compras/adiantamentos vinculados ao chalé.
+        Saldo = devido no rateio − pagamentos − compras/adiantamentos vinculados ao chalé
+        {hasRefunds ? " + devoluções já quitadas" : ""}.
       </p>
       <Table>
         <thead>
           <tr>
-            <Th>Chalé</Th>
-            <Th>Proprietário</Th>
-            <Th className="text-right">Devido</Th>
-            <Th className="text-right">Adiantamentos</Th>
-            <Th className="text-right">Pago</Th>
-            <Th className="text-right">Saldo</Th>
-            <Th>Status</Th>
-            <Th>Pagamentos</Th>
-            {isAdmin && <Th className="w-32">Ações</Th>}
+            <Th className={cell}>Chalé</Th>
+            <Th className={cell}>Proprietário</Th>
+            <Th className={cn(cell, "text-right")}>Devido</Th>
+            <Th className={cn(cell, "text-right")}>Adiantado</Th>
+            <Th className={cn(cell, "text-right")}>Pago</Th>
+            {hasRefunds && <Th className={cn(cell, "text-right")}>Devolvido</Th>}
+            <Th className={cn(cell, "text-right")}>Saldo</Th>
+            <Th className={cell}>Status</Th>
+            <Th className={cell}>Pagamentos</Th>
+            {isAdmin && <Th className={cn(cell, "w-32")}>Ações</Th>}
           </tr>
         </thead>
         <tbody>
           {data?.map((item) => (
             <tr key={item.chaletId}>
-              <Td label="Chalé" className="font-medium text-ink">
+              <Td label="Chalé" className={cn(cell, "font-medium text-ink")}>
                 {item.chaletNumber} — {item.chaletName}
               </Td>
-              <Td label="Proprietário">
+              <Td label="Proprietário" className={cell}>
                 {item.ownerName ?? <span className="text-muted-soft">—</span>}
               </Td>
-              <Td label="Devido" className="text-right">{formatCents(item.owedCents)}</Td>
-              <Td label="Adiantamentos" className="text-right">
+              <Td label="Devido" className={cn(cell, "text-right")}>{formatCents(item.owedCents)}</Td>
+              <Td label="Adiantamentos" className={cn(cell, "text-right")}>
                 {formatCents(item.advanceCents)}
               </Td>
-              <Td label="Pago" className="text-right">{formatCents(item.paidCents)}</Td>
+              <Td label="Pago" className={cn(cell, "text-right")}>{formatCents(item.paidCents)}</Td>
+              {hasRefunds && (
+                <Td label="Devoluções" className={cn(cell, "whitespace-nowrap text-right")}>
+                  {item.refundedCents > 0
+                    ? `− ${formatCents(item.refundedCents)}`
+                    : formatCents(0)}
+                </Td>
+              )}
               <Td
                 label="Saldo"
                 className={cn(
+                  cell,
                   "text-right font-semibold",
                   item.balanceCents > 0 ? "text-error" : "text-success",
                 )}
@@ -160,10 +183,10 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
                   ? `${formatCents(-item.balanceCents)} (crédito)`
                   : formatCents(item.balanceCents)}
               </Td>
-              <Td label="Status">
+              <Td label="Status" className={cell}>
                 <PaymentStatusBadge status={item.status} />
               </Td>
-              <Td label="Pagamentos">
+              <Td label="Pagamentos" className={cell}>
                 {item.payments.length === 0 ? (
                   <span className="text-muted-soft">—</span>
                 ) : (
@@ -178,7 +201,7 @@ function PayableView({ eventId, isAdmin }: { eventId: string; isAdmin: boolean }
                 )}
               </Td>
               {isAdmin && (
-                <Td>
+                <Td className={cell}>
                   {item.balanceCents > 0 && (
                     <Button
                       variant="ghost"
