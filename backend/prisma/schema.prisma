@@ -262,7 +262,11 @@ model Receivable {
   event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   chalet Chalet @relation(fields: [chaletId], references: [id], onDelete: Restrict)
 
-  @@unique([eventId, chaletId])
+  // Sem unique em (eventId, chaletId): uma devolução já quitada permanece no
+  // histórico e o saldo remanescente vira uma nova conta aberta para o mesmo
+  // chalé. A regra "no máximo uma conta OPEN por chalé" é garantida pelo
+  // syncEventReceivables, que apaga as abertas e recria dentro da transação.
+  @@index([eventId, chaletId])
   @@index([status])
   @@map("receivables")
 }

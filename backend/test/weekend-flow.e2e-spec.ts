@@ -292,6 +292,54 @@ describe('Fluxo do final de semana (e2e)', () => {
     expect(res.body.settlement).toHaveLength(3);
   });
 
+  it('devolve o crédito, quita e fecha de novo com saldo remanescente', async () => {
+    const server = app.getHttpServer();
+    const reopen = () =>
+      request(server).post(`/api/events/${eventId}/reopen`).set(auth());
+    const close = () =>
+      request(server).post(`/api/events/${eventId}/close`).set(auth());
+    const pay = (amountCents: number, date: string) =>
+      request(server)
+        .post('/api/payments')
+        .set(auth())
+        .send({ eventId, chaletId: chaletIds[1], date, amountCents });
+    const receivables = () =>
+      request(server).get(`/api/events/${eventId}/receivables`).set(auth());
+
+    // O chalé 1 deve 27158 e paga 40000: o excedente vira crédito ao fechar.
+    await reopen().expect(200);
+    await pay(40000, '2030-01-08').expect(201);
+    await close().expect(200);
+
+    const credito = (await receivables().expect(200)).body.find(
+      (r: { chaletId: string }) => r.chaletId === chaletIds[1],
+    );
+    expect(credito.status).toBe('OPEN');
+    expect(credito.amountCents).toBe(12842);
+
+    await request(server)
+      .patch(`/api/receivables/${credito.id}/settle`)
+      .set(auth())
+      .send({})
+      .expect(200);
+
+    // Devolução quitada permanece no histórico; o saldo que sobra depois dela
+    // abre uma nova conta para o mesmo chalé — antes isso quebrava com P2002.
+    await reopen().expect(200);
+    await pay(5000, '2030-01-09').expect(201);
+    await close().expect(200);
+
+    const doChale = (await receivables().expect(200)).body.filter(
+      (r: { chaletId: string }) => r.chaletId === chaletIds[1],
+    );
+    const porStatus = (status: string) =>
+      doChale
+        .filter((r: { status: string }) => r.status === status)
+        .map((r: { amountCents: number }) => r.amountCents);
+    expect(porStatus('SETTLED')).toEqual([12842]);
+    expect(porStatus('OPEN')).toEqual([5000]);
+  });
+
   it('nega acesso sem token', async () => {
     await request(app.getHttpServer()).get('/api/events').expect(401);
   });
